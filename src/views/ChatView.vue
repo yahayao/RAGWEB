@@ -69,10 +69,12 @@
           <div v-if="message.role === 'assistant'" class="avatar assistant-avatar">AI</div>
           <div class="bubble-wrapper">
             <div class="thinking-context"
-              v-if="message.role === 'assistant' && chatStore.isDeepThinking && chatStore.isShowThinking && getThinkContent(message.content)">
+              v-if="message.role === 'assistant' && chatStore.isDeepThinking && chatStore.isShowThinking && message.content.includes('<think>')">
               {{ getThinkContent(message.content) }}
             </div>
-            <div class="message-bubble">{{ getDisplayContent(message.content) }}</div>
+            <div class="message-bubble" :class="{ 'markdown-body': message.role === 'assistant' }"
+              v-if="message.role === 'assistant'" v-html="renderMarkdown(getDisplayContent(message.content))"></div>
+            <div class="message-bubble" v-else>{{ getDisplayContent(message.content) }}</div>
           </div>
           <div v-if="message.role === 'user'" class="avatar user-avatar">你</div>
         </div>
@@ -125,18 +127,42 @@ import { ref, onMounted, watch, nextTick } from 'vue'
 import { useChatStore } from '../store/chat'
 import { sendMessage, sendMessageStream } from '../api/chat'
 import type { Message, ChatRequest, HistoryItem } from '../types'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+
+marked.setOptions({ breaks: true, gfm: true })
+
+const renderMarkdown = (content: string): string => {
+  if (!content) return ''
+  const raw = marked.parse(content) as string
+  return DOMPurify.sanitize(raw)
+}
 
 const chatStore = useChatStore()
 const inputText = ref('')
 const messageListRef = ref<HTMLElement | null>(null)
 
 const getThinkContent = (content: string) => {
-  const match = content.match(/<think>([\s\S]*?)<\/think>/i)
-  return match?.[1]?.trim() || ''
+  const start = content.indexOf('<think>')
+  if (start === -1) return ''
+  const end = content.indexOf('</think>', start)
+  if (end === -1) {
+    // </think> 尚未到达，流式进行中，显示 <think> 之后的所有内容
+    return content.slice(start + 7).trim()
+  }
+  return content.slice(start + 7, end).trim()
 }
 
 const getDisplayContent = (content: string) => {
-  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+  const start = content.indexOf('<think>')
+  if (start === -1) return content.trim()
+  const end = content.indexOf('</think>', start)
+  if (end === -1) {
+    // 仍在思考中，普通气泡只显示 <think> 之前的内容（通常为空）
+    return content.slice(0, start).trim()
+  }
+  // <think> 之前 + </think> 之后的内容合并显示
+  return (content.slice(0, start) + content.slice(end + 8)).trim()
 }
 
 const scrollToBottom = async () => {
@@ -681,6 +707,110 @@ watch(
   color: var(--ai-bubble-text);
   border-bottom-left-radius: 4px;
   border: 1px solid var(--border);
+}
+
+/* ===== Markdown 渲染样式 ===== */
+.message-bubble.markdown-body {
+  white-space: normal;
+}
+
+.message-bubble.markdown-body :deep(p) {
+  margin: 0 0 0.6em;
+}
+
+.message-bubble.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.message-bubble.markdown-body :deep(h1),
+.message-bubble.markdown-body :deep(h2),
+.message-bubble.markdown-body :deep(h3),
+.message-bubble.markdown-body :deep(h4) {
+  margin: 0.8em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.message-bubble.markdown-body :deep(ul),
+.message-bubble.markdown-body :deep(ol) {
+  margin: 0.4em 0 0.6em;
+  padding-left: 1.4em;
+}
+
+.message-bubble.markdown-body :deep(li) {
+  margin-bottom: 0.25em;
+}
+
+.message-bubble.markdown-body :deep(code) {
+  font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.message-bubble.markdown-body :deep(pre) {
+  margin: 0.6em 0;
+  border-radius: 8px;
+  overflow-x: auto;
+  background-color: #1e1e2e;
+}
+
+.message-bubble.markdown-body :deep(pre code) {
+  display: block;
+  padding: 1em;
+  background: transparent;
+  color: #cdd6f4;
+  font-size: 0.85em;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.message-bubble.markdown-body :deep(blockquote) {
+  margin: 0.5em 0;
+  padding: 0.4em 0.8em;
+  border-left: 3px solid var(--accent);
+  background-color: var(--accent-light);
+  border-radius: 0 4px 4px 0;
+  color: var(--text-secondary);
+}
+
+.message-bubble.markdown-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+  font-size: 0.9em;
+}
+
+.message-bubble.markdown-body :deep(th),
+.message-bubble.markdown-body :deep(td) {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.message-bubble.markdown-body :deep(th) {
+  background-color: var(--accent-light);
+  font-weight: 600;
+}
+
+.message-bubble.markdown-body :deep(a) {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.message-bubble.markdown-body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.8em 0;
+}
+
+.message-bubble.markdown-body :deep(strong) {
+  font-weight: 700;
+}
+
+.message-bubble.markdown-body :deep(em) {
+  font-style: italic;
 }
 
 /* ===== 加载气泡 ===== */
