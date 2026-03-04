@@ -68,7 +68,11 @@
         <div v-for="message in chatStore.messages" :key="message.id" :class="['message-row', message.role]">
           <div v-if="message.role === 'assistant'" class="avatar assistant-avatar">AI</div>
           <div class="bubble-wrapper">
-            <div class="message-bubble">{{ message.content }}</div>
+            <div class="thinking-context"
+              v-if="message.role === 'assistant' && chatStore.isDeepThinking && chatStore.isShowThinking && getThinkContent(message.content)">
+              {{ getThinkContent(message.content) }}
+            </div>
+            <div class="message-bubble">{{ getDisplayContent(message.content) }}</div>
           </div>
           <div v-if="message.role === 'user'" class="avatar user-avatar">你</div>
         </div>
@@ -126,6 +130,15 @@ const chatStore = useChatStore()
 const inputText = ref('')
 const messageListRef = ref<HTMLElement | null>(null)
 
+const getThinkContent = (content: string) => {
+  const match = content.match(/<think>([\s\S]*?)<\/think>/i)
+  return match?.[1]?.trim() || ''
+}
+
+const getDisplayContent = (content: string) => {
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+}
+
 const scrollToBottom = async () => {
   await nextTick()
   if (messageListRef.value) {
@@ -159,10 +172,11 @@ const handleSend = async () => {
       question: userMessage.content,
       history: history.length > 0 ? history : undefined,
       enable_thinking: chatStore.isDeepThinking,
-      return_thinking: chatStore.isDeepThinking,
+      return_thinking: chatStore.isShowThinking,
     }
 
     const response = await sendMessage(requestData)
+    inputText.value = ''
 
     const assistantMessage: Message = {
       id: Date.now().toString(),
@@ -184,7 +198,6 @@ const handleSend = async () => {
     scrollToBottom()
   } finally {
     chatStore.setLoading(false)
-    inputText.value = ''
   }
 }
 
@@ -192,7 +205,7 @@ onMounted(() => {
   if (chatStore.messages.length === 0) {
     chatStore.addMessage({
       id: 'welcome',
-      content: '你好！我是 AI 助手，有什么可以帮助你的吗？',
+      content: '您好！我是 AI 助手，有什么我能帮您的吗？',
       role: 'assistant',
       timestamp: Date.now(),
     })
@@ -598,6 +611,19 @@ watch(
   display: flex;
   flex-direction: column;
   max-width: 100%;
+}
+
+.thinking-context {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background-color: var(--accent-light);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .message-bubble {

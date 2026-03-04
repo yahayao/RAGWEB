@@ -5,9 +5,10 @@ export const useChatStore = defineStore('chat', {
   state: () => ({
     messages: [] as Message[],
     isLoading: false,
-    // 修改1：默认启用深色模式
-    isDarkTheme: true,
+    // 修改1：默认启用浅色模式
+    isDarkTheme: false,
     isDeepThinking: false,
+    isShowThinking: true,// 修改2：增加思考过程显示控制
     sessions: [
       { id: '1', title: '新对话', messages: [] as Message[] },
     ],
@@ -36,6 +37,9 @@ export const useChatStore = defineStore('chat', {
     },
     toggleDeepThinking() {
       this.isDeepThinking = !this.isDeepThinking
+    },
+    toggeleShowThinking() {
+      this.isShowThinking = !this.isShowThinking
     },
     createNewSession() {
       const newSession = {
