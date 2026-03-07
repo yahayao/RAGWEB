@@ -100,6 +100,23 @@
           </button>
           <textarea v-model="inputText" placeholder="发送消息给 AI 助手..." @keydown.enter.exact.prevent="handleSend"
             rows="1"></textarea>
+          <!-- 新增的麦克风按钮 -->
+          <button 
+            class="send-btn" 
+            style="margin-right: 8px;"
+            :class="{ 'recording': isRecording }" 
+            @click="toggleRecording" 
+            :title="isRecording ? '停止录音' : '语音输入'"
+          >
+            <svg v-if="!isRecording" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+              <path d="M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" fill="currentColor"/>
+              <path d="M19 10V12C19 15.9 15.9 19 12 19C8.1 19 5 15.9 5 12V10H7V12C7 14.8 9.2 17 12 17C14.8 17 17 14.8 17 12V10H19Z" fill="currentColor"/>
+              <path d="M11 19V21H13V19H11Z" fill="currentColor"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+              <rect x="6" y="6" width="12" height="12" fill="currentColor" />
+            </svg>
+          </button>
           <button class="send-btn" @click="handleSend" :disabled="!inputText.trim() || chatStore.isLoading"
             title="发送 (Enter)">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -121,9 +138,104 @@ import { ref, onMounted, watch, nextTick } from 'vue'
 import { useChatStore } from '../store/chat'
 import { sendMessage } from '../api/chat'
 import type { Message, ChatRequest } from '../types'
+import RecordRTC from 'recordrtc'
 
 const chatStore = useChatStore()
 const inputText = ref('')
+const isRecording = ref(false)
+let recorder = null
+let audioStream = null   // 新增：用于保存音频流
+
+const toggleRecording = async () => {
+  if (isRecording.value) {
+    await stopRecording()
+  } else {
+    // 如果 recorder 或 audioStream 还存在，强制清理
+    if (recorder || audioStream) {
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop())
+        audioStream = null
+      }
+      if (recorder) {
+        // 尝试停止 recorder（避免残留）
+        try { recorder.stopRecording() } catch (e) {}
+        recorder = null
+      }
+    }
+    await startRecording()
+  }
+}
+
+const startRecording = async () => {
+  console.log('startRecording called')
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })   // 保存到 audioStream
+    console.log('Got stream')
+    recorder = new RecordRTC(audioStream, {   // 使用 audioStream 创建 recorder
+      type: 'audio',
+      mimeType: 'audio/wav',
+      recorderType: RecordRTC.StereoAudioRecorder,
+      numberOfAudioChannels: 1,
+      desiredSampRate: 16000,
+      checkForInactive: 500,
+    })
+    recorder.startRecording()
+    isRecording.value = true
+    console.log('Recording started')
+  } catch (err) {
+    console.error('startRecording error:', err)
+    alert('无法访问麦克风，请检查权限')
+  }
+}
+
+const stopRecording = () => {
+  console.log('stopRecording called')
+  return new Promise((resolve) => {
+    if (!recorder) {
+      console.log('No recorder, resolving')
+      return resolve()
+    }
+    recorder.stopRecording(async () => {
+      console.log('Recording stopped')
+      const blob = recorder.getBlob()
+      const text = await sendAudioToWhisper(blob)
+      if (text) {
+        inputText.value = text
+        // handleSend() // 可取消注释自动发送
+      }
+      // 关闭音频轨道（使用 audioStream）
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop())
+        audioStream = null
+      }
+      recorder = null
+      isRecording.value = false
+      console.log('Cleanup done')
+      resolve()
+    })
+  })
+}
+
+const sendAudioToWhisper = async (audioBlob) => {
+  const formData = new FormData()
+  formData.append('file', audioBlob, 'recording.wav')
+  try {
+    const response = await fetch('http://localhost:8000/transcribe', {
+      method: 'POST',
+      body: formData,
+    })
+    const data = await response.json()
+    if (data.text) {
+      return data.text
+    } else {
+      alert('语音识别失败：' + (data.error || '未知错误'))
+      return ''
+    }
+  } catch (err) {
+    alert('无法连接到语音识别服务，请确保服务已启动')
+    return ''
+  }
+}
 const messageListRef = ref<HTMLElement | null>(null)
 
 const scrollToBottom = async () => {
@@ -784,4 +896,53 @@ textarea::placeholder {
     max-width: 90%;
   }
 }
+#麦克风按钮
+/* 麦克风按钮 - 默认与发送按钮完全一致 */
+.mic-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #F3AF27, #FFD253);
+  color: #554F4C;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(243, 175, 39, 0.35);
+  align-self: flex-end;
+  margin-right: 4px;  /* 与发送按钮保持间距，可根据需要调整 */
+}
+
+.mic-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(243, 175, 39, 0.5);
+}
+
+/* 录音状态 - 改为红色，视觉提醒 */
+.mic-btn.recording {
+  background: #ff4444;  /* 纯红色，可改为渐变红色如 linear-gradient(135deg, #ff4444, #ff7777) */
+  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.35);
+  color: white;
+}
+
+.mic-btn.recording:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 68, 68, 0.5);
+}
+/* 录音状态 - 覆盖发送按钮样式 */
+.send-btn.recording {
+  background: #ff4444;  /* 纯红色背景 */
+  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.35);
+  color: white;  /* 图标变为白色 */
+}
+
+.send-btn.recording:hover {
+  background: #ff6666;  /* 悬停时稍亮 */
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 68, 68, 0.5);
+}
+
 </style>
