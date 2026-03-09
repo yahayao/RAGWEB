@@ -222,7 +222,6 @@ const sendAudioToWhisper = async (audioBlob) => {
   formData.append('file', audioBlob, 'recording.wav')
   try {
     const WHISPER_URL = import.meta.env.VITE_WHISPER_URL || 'http://localhost:8000/transcribe';
-    console.log('Whisper URL:', WHISPER_URL);  // 添加这行python ~/whisper-service/main.py
     const response = await fetch(WHISPER_URL, {
       method: 'POST',
       body: formData,
