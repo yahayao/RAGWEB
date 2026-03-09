@@ -58,11 +58,18 @@ export interface ChatResponse {
   }
 }
 
-/** 新增：对话记录（ChatRecord）类型（按你的业务调整字段）*/
-export interface ChatRecord {
-  id: string;          // 记录ID
+/** 前端使用的会话聚合结构：一个会话下包含多条消息（Message[]） */
+export interface ChatSession {
+  id: string;          // 会话ID
   title?: string;      // 对话标题（可选）
   createTime: number;  // 创建时间戳
-  messages: Message[]; // 该记录下的所有消息
-  // 其他你需要的字段...
+  messages: Message[]; // 该会话下的所有消息
+}
+
+/** 与后端保存/查询对话记录的数据库结构严格对齐：单条消息记录 */
+export interface ChatRecord {
+  user_id: string;                   // 用户ID
+  session_id: string;                // 会话/对话ID
+  role: 'user' | 'assistant';        // 角色
+  content: string;                   // 消息内容
 }
