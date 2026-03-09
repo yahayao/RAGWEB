@@ -139,6 +139,7 @@ import { useChatStore } from '../store/chat'
 import { sendMessage } from '../api/chat'
 import type { Message, ChatRequest } from '../types'
 import RecordRTC from 'recordrtc'
+import {onBeforeUnmount} from 'vue'
 
 const chatStore = useChatStore()
 const inputText = ref('')
@@ -167,10 +168,10 @@ const toggleRecording = async () => {
 }
 
 const startRecording = async () => {
-  console.log('startRecording called')
+  //console.log('startRecording called')
   try {
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })   // 保存到 audioStream
-    console.log('Got stream')
+    //console.log('Got stream')
     recorder = new RecordRTC(audioStream, {   // 使用 audioStream 创建 recorder
       type: 'audio',
       mimeType: 'audio/wav',
@@ -181,7 +182,7 @@ const startRecording = async () => {
     })
     recorder.startRecording()
     isRecording.value = true
-    console.log('Recording started')
+    //console.log('Recording started')
   } catch (err) {
     console.error('startRecording error:', err)
     alert('无法访问麦克风，请检查权限')
@@ -189,14 +190,14 @@ const startRecording = async () => {
 }
 
 const stopRecording = () => {
-  console.log('stopRecording called')
+  //console.log('stopRecording called')
   return new Promise((resolve) => {
     if (!recorder) {
-      console.log('No recorder, resolving')
+      //console.log('No recorder, resolving')
       return resolve()
     }
     recorder.stopRecording(async () => {
-      console.log('Recording stopped')
+      //console.log('Recording stopped')
       const blob = recorder.getBlob()
       const text = await sendAudioToWhisper(blob)
       if (text) {
@@ -210,7 +211,7 @@ const stopRecording = () => {
       }
       recorder = null
       isRecording.value = false
-      console.log('Cleanup done')
+      //console.log('Cleanup done')
       resolve()
     })
   })
@@ -220,22 +221,41 @@ const sendAudioToWhisper = async (audioBlob) => {
   const formData = new FormData()
   formData.append('file', audioBlob, 'recording.wav')
   try {
-    const response = await fetch('http://localhost:8000/transcribe', {
+    const WHISPER_URL = import.meta.env.VITE_WHISPER_URL || 'http://localhost:8000/transcribe';
+    console.log('Whisper URL:', WHISPER_URL);  // 添加这行python ~/whisper-service/main.py
+    const response = await fetch(WHISPER_URL, {
       method: 'POST',
       body: formData,
-    })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+   
     const data = await response.json()
     if (data.text) {
       return data.text
     } else {
-      alert('语音识别失败：' + (data.error || '未知错误'))
-      return ''
+        chatStore.addMessage({
+          id: Date.now().toString(),
+          content: '语音识别失败：' + (data.error || '未知错误'),
+          role: 'assistant',
+          timestamp: Date.now(),
+        })
+        return ''
     }
   } catch (err) {
-    alert('无法连接到语音识别服务，请确保服务已启动')
+    console.error('语音识别服务错误:', err);
+    chatStore.addMessage({
+      id: Date.now().toString(),
+      content: '无法连接到语音识别服务，请确保服务已启动。',
+      role: 'assistant',
+      timestamp: Date.now(),
+    })
     return ''
   }
 }
+
 const messageListRef = ref<HTMLElement | null>(null)
 
 const scrollToBottom = async () => {
@@ -302,6 +322,22 @@ onMounted(() => {
   }
   scrollToBottom()
 })
+
+onBeforeUnmount(() => {
+  // 如果正在录音，立即停止并关闭轨道
+  if (recorder && isRecording.value) {
+    try {
+      recorder.stopRecording(); // 尝试停止录制（可能来不及完成，但尽力）
+    } catch (e) {}
+  }
+  // 无论是否正在录音，关闭音频轨道
+  if (audioStream) {
+    audioStream.getTracks().forEach(track => track.stop());
+    audioStream = null;
+  }
+  recorder = null;
+  isRecording.value = false;
+});
 
 watch(
   () => chatStore.isDarkTheme,
@@ -896,42 +932,10 @@ textarea::placeholder {
     max-width: 90%;
   }
 }
+
 #麦克风按钮
 /* 麦克风按钮 - 默认与发送按钮完全一致 */
-.mic-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: none;
-  background: linear-gradient(135deg, #F3AF27, #FFD253);
-  color: #554F4C;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(243, 175, 39, 0.35);
-  align-self: flex-end;
-  margin-right: 4px;  /* 与发送按钮保持间距，可根据需要调整 */
-}
 
-.mic-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(243, 175, 39, 0.5);
-}
-
-/* 录音状态 - 改为红色，视觉提醒 */
-.mic-btn.recording {
-  background: #ff4444;  /* 纯红色，可改为渐变红色如 linear-gradient(135deg, #ff4444, #ff7777) */
-  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.35);
-  color: white;
-}
-
-.mic-btn.recording:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(255, 68, 68, 0.5);
-}
 /* 录音状态 - 覆盖发送按钮样式 */
 .send-btn.recording {
   background: #ff4444;  /* 纯红色背景 */
