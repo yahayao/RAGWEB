@@ -148,6 +148,11 @@ import RecordRTC from 'recordrtc'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
+
+// ===== 新增代码（仅加这两行）=====
+import { saveChatRecord } from '../api/chat' // 导入保存数据库的接口
+import type { ChatRecord } from '../types/chat' // 导入数据库记录类型
+
 marked.setOptions({ breaks: true, gfm: true })
 
 const renderMarkdown = (content: string): string => {
@@ -343,11 +348,26 @@ const handleSend = async () => {
     role: 'user',
     timestamp: Date.now(),
   }
+
   chatStore.addMessage(userMessage)
 
   // 4. 清空输入框并滚动到底部
   inputText.value = ''
   scrollToBottom()
+
+  // ===== 新增：保存用户消息到数据库 =====
+  try {
+    const userChatRecord: ChatRecord = {
+      user_id: 'default_user',
+      session_id: chatStore.currentSessionId,
+      role: 'user',
+      content: userMessage.content
+    }
+    await saveChatRecord(userChatRecord)
+    console.log('✅ 用户消息已提交到数据库接口')
+  } catch (error) {
+    console.error('❌ 保存用户消息失败：', error)
+  }
 
   // 5. 构建历史记录和请求参数
   const allMessages = chatStore.messages
@@ -384,6 +404,20 @@ const handleSend = async () => {
         scrollToBottom()
       },
       () => {
+        // ===== 新增：保存AI消息（流式）到数据库 =====
+        try {
+          const assistantChatRecord: ChatRecord = {
+            user_id: 'default_user',
+            session_id: chatStore.currentSessionId,
+            role: 'assistant',
+            content: streamedContent
+          }
+          saveChatRecord(assistantChatRecord)
+          console.log('✅ AI消息（流式）已提交到数据库接口')
+        } catch (error) {
+          console.error('❌ 保存AI消息（流式）失败：', error)
+        }
+
         chatStore.setLoading(false) // 流式结束后重置加载状态
         scrollToBottom()
       },
@@ -408,6 +442,21 @@ const handleSend = async () => {
       }
       chatStore.addMessage(assistantMessage)
       scrollToBottom()
+
+      // ===== 新增：保存AI消息（普通）到数据库 =====
+      try {
+        const assistantChatRecord: ChatRecord = {
+          user_id: 'default_user',
+          session_id: chatStore.currentSessionId,
+          role: 'assistant',
+          content: assistantMessage.content
+        }
+        await saveChatRecord(assistantChatRecord)
+        console.log('✅ AI消息（普通）已提交到数据库接口')
+      } catch (error) {
+        console.error('❌ 保存AI消息（普通）失败：', error)
+      }
+
     } catch (error) {
       console.error('发送消息失败:', error)
       chatStore.addMessage({
