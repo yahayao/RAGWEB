@@ -73,3 +73,4 @@ export interface ChatRecord {
   role: 'user' | 'assistant'        // 角色
   content: string                   // 消息内容
 }
+
