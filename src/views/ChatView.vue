@@ -418,20 +418,6 @@ const handleSend = async () => {
   inputText.value = ''
   scrollToBottom()
 
-  // ===== 新增：保存用户消息到数据库 =====
-  try {
-    const userChatRecord: ChatRecord = {
-      user_id: chatStore.currentUserId,
-      session_id: chatStore.currentSessionId,
-      role: 'user',
-      content: userMessage.content
-    }
-    await saveChatRecord(userChatRecord)
-    console.log('✅ 用户消息已提交到数据库接口')
-  } catch (error) {
-    console.error('❌ 保存用户消息失败：', error)
-  }
-
   // 5. 构建历史记录和请求参数
   const allMessages = chatStore.messages
   const history: HistoryItem[] = allMessages
@@ -467,19 +453,21 @@ const handleSend = async () => {
         scrollToBottom()
       },
       () => {
-        // ===== 新增：保存AI消息（流式）到数据库 =====
-        try {
-          const assistantChatRecord: ChatRecord = {
-            user_id: chatStore.currentUserId,
-            session_id: chatStore.currentSessionId,
-            role: 'assistant',
-            content: streamedContent
+        // ===== 修改：只有流式完成才保存用户和AI消息到数据库 =====
+        (async () => {
+          try {
+            const chatRecord: ChatRecord = {
+              user_id: chatStore.currentUserId,
+              session_id: chatStore.currentSessionId,
+              question: userMessage.content,
+              answer: streamedContent,
+            }
+            await saveChatRecord(chatRecord)
+            console.log('✅ 对话轮次（流式）已提交到数据库接口')
+          } catch (error) {
+            console.error('❌ 保存消息失败：', error)
           }
-          saveChatRecord(assistantChatRecord)
-          console.log('✅ AI消息（流式）已提交到数据库接口')
-        } catch (error) {
-          console.error('❌ 保存AI消息（流式）失败：', error)
-        }
+        })()
 
         chatStore.setLoading(false) // 流式结束后重置加载状态
         scrollToBottom()
@@ -487,7 +475,11 @@ const handleSend = async () => {
       (error: Error) => {
         console.error('流式传输错误:', error)
         if (!streamedContent) {
-          chatStore.updateMessageContent(msgId, '抱歉，发送失败了，请稍后再试。')
+          const isTimeout = /超时|timeout/i.test(error.message)
+          chatStore.updateMessageContent(
+            msgId,
+            isTimeout ? '请求超时，请检查网络后重试。' : '抱歉，发送失败了，请稍后再试。'
+          )
         }
         chatStore.setLoading(false) // 错误时重置加载状态
         scrollToBottom()
@@ -506,25 +498,27 @@ const handleSend = async () => {
       chatStore.addMessage(assistantMessage)
       scrollToBottom()
 
-      // ===== 新增：保存AI消息（普通）到数据库 =====
+      // ===== 修改：只有成功获得AI响应才保存用户和AI消息到数据库 =====
       try {
-        const assistantChatRecord: ChatRecord = {
+        const chatRecord: ChatRecord = {
           user_id: chatStore.currentUserId,
           session_id: chatStore.currentSessionId,
-          role: 'assistant',
-          content: assistantMessage.content
+          question: userMessage.content,
+          answer: assistantMessage.content,
         }
-        await saveChatRecord(assistantChatRecord)
-        console.log('✅ AI消息（普通）已提交到数据库接口')
+        await saveChatRecord(chatRecord)
+        console.log('✅ 对话轮次（普通）已提交到数据库接口')
       } catch (error) {
-        console.error('❌ 保存AI消息（普通）失败：', error)
+        console.error('❌ 保存消息失败：', error)
       }
 
     } catch (error) {
       console.error('发送消息失败:', error)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      const isTimeout = /超时|timeout|ECONNABORTED/i.test(errorMsg)
       chatStore.addMessage({
         id: Date.now().toString(),
-        content: '抱歉，发送失败了，请稍后再试。',
+        content: isTimeout ? '请求超时，请检查网络后重试。' : '抱歉，发送失败了，请稍后再试。',
         role: 'assistant',
         timestamp: Date.now(),
       })

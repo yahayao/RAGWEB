@@ -66,11 +66,11 @@ export interface ChatSession {
   messages: Message[] // 该会话下的所有消息
 }
 
-/** 与后端保存/查询对话记录的数据库结构严格对齐：单条消息记录 */
+/** 与后端保存接口对齐：一轮对话记录（用户问题 + AI回复） */
 export interface ChatRecord {
   user_id: string                   // 用户ID
   session_id: string                // 会话/对话ID
-  role: 'user' | 'assistant'        // 角色
-  content: string                   // 消息内容
+  question: string                  // 用户问题
+  answer: string                    // AI回复
 }
 

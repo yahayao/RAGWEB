@@ -92,7 +92,7 @@ export const useChatStore = defineStore('chat', {
     async loadMessagesForSession(sessionId: string) {
       try {
         const res = await getChatRecords(sessionId, this.currentUserId)
-        const records: { id: number; role: 'user' | 'assistant'; content: string; create_time: string }[] = res.data.data
+        const records: { id: string | number; role: 'user' | 'assistant'; content: string; create_time: string }[] = res.data.data
         const messages: Message[] = records.map(r => ({
           id: String(r.id),
           role: r.role,

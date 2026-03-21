@@ -107,13 +107,23 @@ PORT=3000
 CREATE DATABASE IF NOT EXISTS ragweb;
 USE ragweb;
 
-CREATE TABLE IF NOT EXISTS chat_records (
+CREATE TABLE IF NOT EXISTS chat_users (
   id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id     VARCHAR(64)  NOT NULL DEFAULT 'default_user',
+  username    VARCHAR(64) NOT NULL UNIQUE,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id     BIGINT UNSIGNED  NOT NULL,
   session_id  VARCHAR(64)  NOT NULL,
-  role        VARCHAR(16)  NOT NULL COMMENT 'user | assistant',
-  content     TEXT         NOT NULL,
-  create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+  question    TEXT         NOT NULL,
+  answer      TEXT         NOT NULL,
+  create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_session_time (user_id, session_id, create_time),
+  CONSTRAINT fk_chat_sessions_user
+    FOREIGN KEY (user_id) REFERENCES chat_users(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
 );
 ```
 

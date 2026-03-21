@@ -1,9 +1,11 @@
 import axios from 'axios'
 import type { ChatRequest, ChatResponse, ChatRecord } from '../types/chat' // 修正导入路径
 
+const CHAT_TIMEOUT_MS = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS ?? 15000)
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 120000,
+  timeout: CHAT_TIMEOUT_MS,
 })
 
 export const sendMessage = async (data: ChatRequest): Promise<ChatResponse> => {
@@ -24,11 +26,23 @@ export const sendMessageStream = async (
   onDone: () => void,
   onError: (error: Error) => void,
 ): Promise<void> => {
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  const refreshTimeout = () => {
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => {
+      controller.abort()
+    }, CHAT_TIMEOUT_MS)
+  }
+
   try {
+    refreshTimeout()
     const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/rag/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, stream: true }),
+      signal: controller.signal,
     })
 
     if (!response.ok) {
@@ -42,6 +56,7 @@ export const sendMessageStream = async (
     let buffer = ''
 
     while (true) {
+      refreshTimeout()
       const { done, value } = await reader.read()
       if (done) break
 
@@ -73,7 +88,13 @@ export const sendMessageStream = async (
     }
     onDone()
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      onError(new Error(`请求超时，请在网络稳定后重试（>${CHAT_TIMEOUT_MS}ms）`))
+      return
+    }
     onError(error as Error)
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
 }
 
@@ -85,8 +106,8 @@ const chatDbApi = axios.create({
 })
 
 /**
- * 保存单条对话记录到数据库
- * @param data 对话记录（session_id/role/content 必填）
+ * 保存一轮对话到数据库
+ * @param data 对话轮次（session_id/question/answer 必填）
  */
 export const saveChatRecord = async (data: ChatRecord) => {
   return chatDbApi.post('/record', data)
