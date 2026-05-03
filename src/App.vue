@@ -9,21 +9,5 @@
 </script>
 
 <style>
-/* 全局样式重置 */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html,
-body,
-#app {
-  height: 100%;
-  overflow: hidden;
-}
-
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-}
+/* App.vue 已无需全局样式 —— 所有设计令牌与重置已迁移至 main.css */
 </style>
