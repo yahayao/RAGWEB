@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
   const chatBackendTarget = env.VITE_CHAT_BACKEND_URL || 'http://localhost:9000'
   const usePythonChatBackend = (env.VITE_USE_PYTHON_CHAT_BACKEND ?? 'true').toLowerCase() !== 'false'
 
-  const serverProxy: Record<string, { target: string; changeOrigin: boolean; secure: boolean; xfwd?: boolean }> = {
+  const serverProxy: Record<string, { target: string; changeOrigin: boolean; secure: boolean; xfwd?: boolean; ws?: boolean }> = {
     '/v1': {
       target: proxyTarget,
       changeOrigin: true,
@@ -24,6 +24,47 @@ export default defineConfig(({ mode }) => {
 
   if (usePythonChatBackend) {
     serverProxy['/api/chat'] = {
+      target: chatBackendTarget,
+      changeOrigin: true,
+      xfwd: true,
+      secure: false,
+    }
+    // 人工介入告警接口
+    serverProxy['/api/alert'] = {
+      target: chatBackendTarget,
+      changeOrigin: true,
+      xfwd: true,
+      secure: false,
+    }
+    // 数据大屏 API
+    serverProxy['/api/dashboard'] = {
+      target: chatBackendTarget,
+      changeOrigin: true,
+      xfwd: true,
+      secure: false,
+    }
+    // 数据大屏 WebSocket
+    serverProxy['/ws/dashboard'] = {
+      target: chatBackendTarget.replace(/^http/, 'ws'),
+      ws: true,
+      changeOrigin: true,
+      secure: false,
+    }
+    // 数据大屏页面
+    serverProxy['/dashboard'] = {
+      target: chatBackendTarget,
+      changeOrigin: true,
+      secure: false,
+    }
+    // 统计 API
+    serverProxy['/api/statistic'] = {
+      target: chatBackendTarget,
+      changeOrigin: true,
+      xfwd: true,
+      secure: false,
+    }
+    // IP 查询 API
+    serverProxy['/api/ip'] = {
       target: chatBackendTarget,
       changeOrigin: true,
       xfwd: true,

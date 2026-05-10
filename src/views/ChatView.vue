@@ -783,16 +783,6 @@ const closeModal = () => {
   contactForm.value.phone = ''
 }
 
-const sendAlertToTeacher = async (data: {
-  studentName: string;
-  contact: string;
-  sessionId: string;
-  intentType: 'high_intent' | 'urgent';
-  messageSnippet: string;
-}) => {
-  return axios.post('/api/alert/teacher', data)
-}
-
 onMounted(async () => {
   if (!chatStore.currentUserId) {
     showUserModal.value = true

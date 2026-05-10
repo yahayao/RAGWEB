@@ -1,164 +1,53 @@
-from fastapi import FastAPI, HTTPException, Request
+"""RAGWEB 后端主入口 — FastAPI 应用
+
+挂载模块:
+- /api/chat/*    聊天记录 CRUD（内联实现）
+- /api/statistic 数据统计 API（statistic.py 子路由）
+- /api/ip        IP 查询 API（ip2location.py 子路由）
+- /dashboard     数据大屏页面
+- /api/dashboard 数据大屏数据 API
+- /api/alert     人工介入告警
+- /ws/dashboard  数据大屏 WebSocket 实时推送
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from ipaddress import ip_address
-import os
-from datetime import datetime
+from contextlib import asynccontextmanager
 
-# --- 1. 数据库配置 (ORM 优化部分 - 对应原 A/B/D 功能) ---
-# 这里简化了原 app.py 中手动读取 .env 和复杂的连接池管理
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:@localhost:5432/ai_chat")
-if not DATABASE_URL:
-    raise RuntimeError("请在 .env 文件中配置 DATABASE_URL，或者设置环境变量")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# 共享数据库模块
+import database
 
-class ChatHistory(Base):
-    __tablename__ = "chat_history"
-    id = Column(Integer, primary_key=True, index=True)
-    user_message = Column(Text, nullable=False)
-    ip_address = Column(String(45), nullable=True)  # 存储IP地址
-    location = Column(String(255), nullable=True)   # 存储IP地理位置``
-    timestamp = Column(DateTime, default=datetime.utcnow)
+# 子路由
+from statistic import router as statistic_router
+from ip2location import router as ip_router
+from dashboard import router as dashboard_router
 
-# 创建表 (替代原 ensure_schema 的自动建表逻辑)
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
-# --- 2. IP2Region 初始化 (保持原样，但适配 FastAPI 结构) ---
-try:
-    import ip2region.searcher as ip2xdb
-    import ip2region.util as ip2util
-except Exception as e:
-    ip2xdb = None
-    ip2util = None
 
-IP2REGION_DB_PATH = os.getenv(
-    "IP2REGION_DB_PATH",
-    os.path.join(os.path.dirname(__file__), "ip2region", "ip2region_v4.xdb"),
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时建表+初始化 IP 检索器，关闭时释放资源"""
+    database.ensure_schema()
+    database.init_searcher()
+    logger.info("RAGWEB backend started")
+    yield
+    database.close_searcher()
+    logger.info("RAGWEB backend stopped")
+
+
+app = FastAPI(
+    title="RAGWEB Backend",
+    version="2.0",
+    lifespan=lifespan,
 )
 
-_searcher = None
-
-def _build_ip2region_searcher():
-    if ip2xdb is None or ip2util is None:
-        return None
-    if not os.path.exists(IP2REGION_DB_PATH):
-        app.logger.warning("ip2region xdb 文件不存在: %s", IP2REGION_DB_PATH)
-        return None
-
-    try:
-        ip2util.verify_from_file(IP2REGION_DB_PATH)
-        with open(IP2REGION_DB_PATH, "rb") as handle:
-            header = ip2util.load_header(handle)
-            version = ip2util.version_from_header(header)
-            if version is None:
-                raise RuntimeError("无法从 xdb header 解析 IP 版本")
-            v_index = ip2util.load_vector_index(handle)
-        return ip2xdb.new_with_vector_index(version, IP2REGION_DB_PATH, v_index)
-    except Exception as exc:  # pragma: no cover
-        app.logger.warning("初始化 ip2region 失败，将使用 Unknown: %s", exc)
-        return None
-
-   
-def _close_searcher() -> None:
-    if _searcher is None:
-        return
-    try:
-        _searcher.close()
-    except Exception:
-        pass
-
-
-def _parse_ip_candidate(value: str) -> str | None:
-    candidate = (value or "").strip().strip('"').strip("'")
-    if not candidate or candidate.lower() == "unknown":
-        return None
-    
-    if candidate.startswith("[") and "]" in candidate:
-        candidate = candidate[1: candidate.index("]")]
-
-    if candidate.startswith("::ffff:"):
-        candidate = candidate[7:]
-
-    if "%" in candidate:
-        candidate = candidate.split("%", 1)[0]
-
-    # IPv4 with port: 1.2.3.4:5678
-    if candidate.count(":") == 1 and "." in candidate:
-        host, port = candidate.rsplit(":", 1)
-        if port.isdigit():
-            candidate = host
-        
-    try:
-        ip_address(candidate)
-        return candidate
-    except Exception:
-        return None
-
-
-def _prefer_public_ip(candidates: list[str]) -> str | None:
-    parsed: list[str] = []
-    for c in candidates:
-        ip = _parse_ip_candidate(c)
-        if ip:
-            parsed.append(ip)
-    
-    for ip in parsed:
-        ip_obj = ip_address(ip)
-        if ip_obj.is_global: 
-            return ip
-    
-    return parsed[0] if parsed else None
-
-def extract_client_ip(request) -> str:
-    direct_headers = [
-        request.headers.get("CF-Connecting-IP", ""),
-        request.headers.get("True-Client-IP", ""),
-        request.headers.get("X-Real-IP", ""),
-        request.headers.get("X-Client-IP", ""),
-    ]
-    chosen = _prefer_public_ip(direct_headers)
-    if chosen:
-        return chosen
-
-    xff = request.headers.get("X-Forwarded-For", "").strip()
-    if xff:
-        chosen = _prefer_public_ip([p.strip() for p in xff.split(",")])
-        if chosen:
-            return chosen
-
-    forwarded = request.headers.get("Forwarded", "").strip()
-    if forwarded:
-        forwarded_candidates: list[str] = []
-        for seg in forwarded.split(","):
-            for item in seg.split(";"):
-                kv = item.strip()
-                if kv.lower().startswith("for="):
-                    forwarded_candidates.append(kv.split("=", 1)[1].strip())
-        chosen = _prefer_public_ip(forwarded_candidates)
-        if chosen:
-            return chosen
-
-    return _parse_ip_candidate(request.client.host) or "0.0.0.0"
-
-
-def normalize_ip(raw_ip: str) -> str:
-    if not raw_ip:
-        return "0.0.0.0"
-    ip = raw_ip.strip()
-    if ip.startswith("::ffff:"):
-        ip = ip[7:]
-    if "%" in ip:
-        ip = ip.split("%", 1)[0]
-    return ip
-
-# --- 4. 聊天接口 (整合 ORM 与 原生 IP 逻辑) ---
-app = FastAPI()
-
-# 允许跨域
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -167,54 +56,183 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/chat/")
-async def chat(request: Request, user_message: str):
-    db = SessionLocal()
+
+# ==============================
+# 根健康检查
+# ==============================
+
+@app.get("/")
+def health_check():
+    return {"code": 200, "message": "RAGWEB Backend OK"}
+
+
+# ==============================
+# /api/chat/* 聊天记录接口
+# ==============================
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from typing import Any, cast
+
+
+async def _safe_json_body(request: Request) -> dict[str, Any]:
     try:
-        # 1. 使用保留的原生复杂逻辑获取 IP
-        raw_ip = extract_client_ip(request)
-        
-        # 2. 使用 IP2Region 查询地理位置
-        location = "Unknown"
-        if _searcher and raw_ip != "0.0.0.0":
-            try:
-                region_data = _searcher.search(raw_ip)
-                # 直接判断 region_data 是否存在，如果是字符串就直接赋值
-                if region_data: # 如果查询成功，region_data 会是字符串
-                    location = region_data # 直接把字符串给 location
-                else: # 如果查询失败，region_data 会是 None 或空
-                    location = "Unknown"
-            except:
-                location = "Unknown"
+        body = await request.json()
+        return body if isinstance(body, dict) else {}
+    except Exception:
+        return {}
 
-        # 3. 使用 ORM 保存数据 (替代了原生的 SQL 拼接)
-        chat_record = ChatHistory(
-            user_message=user_message,
-            ip_address=raw_ip,
-            location=location
+
+@app.get("/api/chat/records/{session_id:path}")
+def get_records(session_id: str, request: Request) -> JSONResponse:
+    """获取指定会话的历史记录"""
+    username = (request.query_params.get("user_id") or "default_user").strip() or "default_user"
+    db = database.SessionLocal()
+    try:
+        user = db.query(database.ChatUser.id).filter(database.ChatUser.username == username).first()
+        user_id = cast(int | None, user[0] if user else None)
+
+        if not user_id:
+            return JSONResponse(status_code=200, content={"code": 200, "message": "获取成功", "data": []})
+
+        turns = (
+            db.query(database.ChatSession)
+            .filter(
+                database.ChatSession.session_id == session_id,
+                database.ChatSession.user_id == user_id,
+            )
+            .order_by(database.ChatSession.create_time.asc(), database.ChatSession.id.asc())
+            .all()
         )
-        db.add(chat_record)
-        db.commit()
-        db.refresh(chat_record)
 
-        return {
-            "response": f"收到: {user_message}",
-            "location": location,
-            "raw_ip": raw_ip,
-            "id": chat_record.id
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        messages: list[dict[str, Any]] = []
+        for turn in turns:
+            ctime = database._to_str_time(turn.create_time)
+            messages.append({
+                "id": f"{turn.id}-u",
+                "role": "user",
+                "content": turn.question,
+                "create_time": ctime,
+            })
+            messages.append({
+                "id": f"{turn.id}-a",
+                "role": "assistant",
+                "content": turn.answer,
+                "create_time": ctime,
+            })
+
+        return JSONResponse(status_code=200, content={"code": 200, "message": "获取成功", "data": messages})
+    except Exception as exc:
+        logger.exception("获取记录失败")
+        return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
     finally:
         db.close()
 
 
-@app.on_event("startup")
-def startup_event():
-    global _searcher
-    _searcher = _build_ip2region_searcher()
-    if _searcher:
-        print("IP查询功能已启动")
-    else:
-        print("警告：IP查询功能启动失败")
+@app.delete("/api/chat/records/{session_id:path}")
+def delete_records(session_id: str, request: Request) -> JSONResponse:
+    """删除指定会话的全部记录"""
+    username = (request.query_params.get("user_id") or "default_user").strip() or "default_user"
+    db = database.SessionLocal()
+    try:
+        user = db.query(database.ChatUser.id).filter(database.ChatUser.username == username).first()
+        user_id = cast(int | None, user[0] if user else None)
+
+        if not user_id:
+            return JSONResponse(status_code=200, content={"code": 200, "message": "删除成功", "data": {"affectedRows": 0}})
+
+        affected = (
+            db.query(database.ChatSession)
+            .filter(
+                database.ChatSession.session_id == session_id,
+                database.ChatSession.user_id == user_id,
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        return JSONResponse(status_code=200, content={"code": 200, "message": "删除成功", "data": {"affectedRows": affected}})
+    except Exception as exc:
+        db.rollback()
+        return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
+    finally:
+        db.close()
+
+
+@app.get("/api/chat/sessions/{user_id:path}")
+def list_sessions(user_id: str, request: Request) -> JSONResponse:
+    """获取用户的所有会话列表"""
+    db = database.SessionLocal()
+    try:
+        uid = database.ensure_user_id_by_username(db, user_id, database.extract_client_ip(request))
+        rows = db.execute(
+            text("""
+                SELECT cs.session_id,
+                       MAX(cs.create_time) AS last_time,
+                       MIN(cs.create_time) AS create_time,
+                       (SELECT question
+                        FROM chat_sessions
+                        WHERE session_id = cs.session_id AND user_id = cs.user_id
+                        ORDER BY create_time ASC, id ASC
+                        LIMIT 1) AS first_message
+                FROM chat_sessions cs
+                WHERE cs.user_id = :uid
+                GROUP BY cs.session_id, cs.user_id
+                ORDER BY last_time DESC
+            """),
+            {"uid": uid},
+        ).mappings().all()
+
+        data: list[dict[str, Any]] = []
+        for row in rows:
+            data.append({
+                "session_id": row.get("session_id"),
+                "last_time": database._to_str_time(row.get("last_time")),
+                "create_time": database._to_str_time(row.get("create_time")),
+                "first_message": row.get("first_message"),
+            })
+
+        return JSONResponse(status_code=200, content={"code": 200, "message": "获取成功", "data": data})
+    except Exception as exc:
+        db.rollback()
+        return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
+    finally:
+        db.close()
+
+
+@app.post("/api/chat/record")
+async def save_record(request: Request) -> JSONResponse:
+    """保存一轮对话记录"""
+    body = await _safe_json_body(request)
+    username = str(body.get("user_id") or "default_user")
+    session_id = str(body.get("session_id") or "").strip()
+    question = str(body.get("question") or "").strip()
+    answer = str(body.get("answer") or "").strip()
+
+    if not session_id or not question or not answer:
+        return JSONResponse(status_code=400, content={"code": 400, "message": "缺少必要字段：session_id/question/answer"})
+
+    db = database.SessionLocal()
+    try:
+        client_ip = database.extract_client_ip(request)
+        user_id = database.ensure_user_id_by_username(db, username, client_ip)
+        turn = database.ChatSession(user_id=user_id, session_id=session_id, question=question, answer=answer)
+        db.add(turn)
+        db.flush()
+        insert_id = int(turn.id)
+        db.commit()
+        return JSONResponse(status_code=200, content={"code": 200, "message": "保存成功", "data": {"id": insert_id}})
+    except Exception as exc:
+        db.rollback()
+        return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
+    finally:
+        db.close()
+
+
+# ==============================
+# 挂载子路由
+# ==============================
+
+app.include_router(statistic_router)     # /api/statistic/*
+app.include_router(ip_router)            # /api/ip/*
+app.include_router(dashboard_router)     # /dashboard, /api/dashboard/*, /api/alert/*, /ws/dashboard
