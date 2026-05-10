@@ -1,343 +1,371 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAGWEB 数据大屏</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: #0a0e1a;
-    color: #e0e6ed;
-    overflow: hidden;
-    height: 100vh;
-  }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAGWEB 数据大屏</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+          sans-serif;
+        background: #0a0e1a;
+        color: #e0e6ed;
+        overflow: hidden;
+        height: 100vh;
+      }
 
-  /* ===== 顶部标题栏 ===== */
-  .header {
-    height: 64px;
-    background: linear-gradient(90deg, #0d1117 0%, #0f1923 50%, #0d1117 100%);
-    border-bottom: 1px solid #1a2a3a;
-    display: flex;
-    align-items: center;
-    padding: 0 32px;
-    position: relative;
-    z-index: 10;
-  }
-  .header-title {
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    background: linear-gradient(90deg, #4facfe, #00f2fe);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .header-subtitle {
-    font-size: 13px;
-    color: #5a6a80;
-    margin-left: 16px;
-    letter-spacing: 1px;
-  }
-  .header-right {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    font-size: 13px;
-    color: #5a6a80;
-  }
-  .header-stat {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .header-stat .val {
-    color: #4facfe;
-    font-weight: 600;
-    font-size: 18px;
-  }
-  .header-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-    animation: pulse-dot 2s infinite;
-  }
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(1.4); }
-  }
+      /* ===== 顶部标题栏 ===== */
+      .header {
+        height: 64px;
+        background: linear-gradient(90deg, #0d1117 0%, #0f1923 50%, #0d1117 100%);
+        border-bottom: 1px solid #1a2a3a;
+        display: flex;
+        align-items: center;
+        padding: 0 32px;
+        position: relative;
+        z-index: 10;
+      }
+      .header-title {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        background: linear-gradient(90deg, #4facfe, #00f2fe);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .header-subtitle {
+        font-size: 13px;
+        color: #5a6a80;
+        margin-left: 16px;
+        letter-spacing: 1px;
+      }
+      .header-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        font-size: 13px;
+        color: #5a6a80;
+      }
+      .header-stat {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .header-stat .val {
+        color: #4facfe;
+        font-weight: 600;
+        font-size: 18px;
+      }
+      .header-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+        animation: pulse-dot 2s infinite;
+      }
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.4;
+          transform: scale(1.4);
+        }
+      }
 
-  /* ===== 主布局 ===== */
-  .main-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 16px;
-    padding: 16px 24px;
-    height: calc(100vh - 64px);
-  }
-  .panel {
-    background: rgba(13, 17, 23, 0.8);
-    border: 1px solid #1a2a3a;
-    border-radius: 12px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-    position: relative;
-  }
-  .panel.full-width {
-    grid-column: 1 / -1;
-  }
-  .panel-header {
-    padding: 14px 20px;
-    border-bottom: 1px solid #1a2a3a;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #b0bec5;
-    flex-shrink: 0;
-  }
-  .panel-header::before {
-    content: '';
-    width: 3px;
-    height: 16px;
-    border-radius: 2px;
-    background: linear-gradient(180deg, #4facfe, #00f2fe);
-  }
-  .panel-body {
-    flex: 1;
-    min-height: 0;
-  }
+      /* ===== 主布局 ===== */
+      .main-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 16px;
+        padding: 16px 24px;
+        height: calc(100vh - 64px);
+      }
+      .panel {
+        background: rgba(13, 17, 23, 0.8);
+        border: 1px solid #1a2a3a;
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        backdrop-filter: blur(8px);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+        position: relative;
+      }
+      .panel.full-width {
+        grid-column: 1 / -1;
+      }
+      .panel-header {
+        padding: 14px 20px;
+        border-bottom: 1px solid #1a2a3a;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #b0bec5;
+        flex-shrink: 0;
+      }
+      .panel-header::before {
+        content: '';
+        width: 3px;
+        height: 16px;
+        border-radius: 2px;
+        background: linear-gradient(180deg, #4facfe, #00f2fe);
+      }
+      .panel-body {
+        flex: 1;
+        min-height: 0;
+      }
 
-  /* ===== Toast 通知 ===== */
-  .toast-container {
-    position: fixed;
-    top: 80px;
-    right: 24px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    pointer-events: none;
-  }
-  .toast {
-    pointer-events: auto;
-    min-width: 360px;
-    max-width: 480px;
-    background: rgba(13, 17, 23, 0.95);
-    border: 1px solid #1a2a3a;
-    border-left: 4px solid #4facfe;
-    border-radius: 10px;
-    padding: 16px 20px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    animation: toast-in 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
-    position: relative;
-    backdrop-filter: blur(12px);
-  }
-  .toast.urgent {
-    border-left-color: #ef4444;
-  }
-  .toast.urgent .toast-type {
-    color: #ef4444;
-  }
-  @keyframes toast-in {
-    from { opacity: 0; transform: translateX(80px) scale(0.95); }
-    to { opacity: 1; transform: translateX(0) scale(1); }
-  }
-  @keyframes toast-out {
-    from { opacity: 1; transform: translateX(0); }
-    to { opacity: 0; transform: translateX(80px); }
-  }
-  .toast-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-  .toast-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: #ef4444;
-    animation: pulse-dot 1s infinite;
-  }
-  .toast-type {
-    font-size: 13px;
-    font-weight: 700;
-    color: #f59e0b;
-    letter-spacing: 0.5px;
-  }
-  .toast-time {
-    margin-left: auto;
-    font-size: 11px;
-    color: #4a5568;
-  }
-  .toast-body {
-    font-size: 13px;
-    color: #b0bec5;
-    line-height: 1.6;
-  }
-  .toast-body .highlight {
-    color: #4facfe;
-    font-weight: 600;
-  }
-  .toast-close {
-    position: absolute;
-    top: 10px;
-    right: 14px;
-    background: none;
-    border: none;
-    color: #5a6a80;
-    cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
-  }
-  .toast-close:hover { color: #b0bec5; }
+      /* ===== Toast 通知 ===== */
+      .toast-container {
+        position: fixed;
+        top: 80px;
+        right: 24px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        pointer-events: none;
+      }
+      .toast {
+        pointer-events: auto;
+        min-width: 360px;
+        max-width: 480px;
+        background: rgba(13, 17, 23, 0.95);
+        border: 1px solid #1a2a3a;
+        border-left: 4px solid #4facfe;
+        border-radius: 10px;
+        padding: 16px 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        animation: toast-in 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+        position: relative;
+        backdrop-filter: blur(12px);
+      }
+      .toast.urgent {
+        border-left-color: #ef4444;
+      }
+      .toast.urgent .toast-type {
+        color: #ef4444;
+      }
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+          transform: translateX(80px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+        }
+      }
+      @keyframes toast-out {
+        from {
+          opacity: 1;
+          transform: translateX(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateX(80px);
+        }
+      }
+      .toast-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .toast-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ef4444;
+        animation: pulse-dot 1s infinite;
+      }
+      .toast-type {
+        font-size: 13px;
+        font-weight: 700;
+        color: #f59e0b;
+        letter-spacing: 0.5px;
+      }
+      .toast-time {
+        margin-left: auto;
+        font-size: 11px;
+        color: #4a5568;
+      }
+      .toast-body {
+        font-size: 13px;
+        color: #b0bec5;
+        line-height: 1.6;
+      }
+      .toast-body .highlight {
+        color: #4facfe;
+        font-weight: 600;
+      }
+      .toast-close {
+        position: absolute;
+        top: 10px;
+        right: 14px;
+        background: none;
+        border: none;
+        color: #5a6a80;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .toast-close:hover {
+        color: #b0bec5;
+      }
 
-  /* ===== 空状态 ===== */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #2a3a4a;
-  }
-  .empty-state .icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-  }
-  .empty-state .text {
-    font-size: 14px;
-  }
-</style>
-</head>
-<body>
-
-<!-- 顶部栏 -->
-<div class="header">
-  <span class="header-title">RAGWEB 数据大屏</span>
-  <span class="header-subtitle">实时监控 · IP分布 · 关键词分析</span>
-  <div class="header-right">
-    <div class="header-stat">
-      <span>总用户</span>
-      <span class="val" id="stat-users">-</span>
-    </div>
-    <div class="header-stat">
-      <span>总消息</span>
-      <span class="val" id="stat-messages">-</span>
-    </div>
-    <div class="header-stat">
-      <span>今日</span>
-      <span class="val" id="stat-today">-</span>
-    </div>
-    <div class="header-dot" title="WebSocket 已连接"></div>
-    <span style="font-size:12px;" id="ws-status">连接中...</span>
-  </div>
-</div>
-
-<!-- 主体 -->
-<div class="main-grid">
-  <!-- 左上：中国地图 IP 分布 -->
-  <div class="panel">
-    <div class="panel-header">用户 IP 归属地分布</div>
-    <div class="panel-body" id="chart-map"></div>
-  </div>
-
-  <!-- 右上：词云图 -->
-  <div class="panel">
-    <div class="panel-header">用户消息关键词</div>
-    <div class="panel-body" id="chart-wordcloud"></div>
-  </div>
-
-  <!-- 下半全宽：告警记录列表 -->
-  <div class="panel full-width">
-    <div class="panel-header">📞 人工介入告警记录（最近10条）</div>
-    <div style="overflow-y:auto;flex:1;min-height:0;padding:12px 20px;" id="alert-log">
-      <div class="empty-state">
-        <div class="icon">📭</div>
-        <div class="text">暂无告警，当前系统运行正常</div>
+      /* ===== 空状态 ===== */
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #2a3a4a;
+      }
+      .empty-state .icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+      }
+      .empty-state .text {
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 顶部栏 -->
+    <div class="header">
+      <span class="header-title">RAGWEB 数据大屏</span>
+      <span class="header-subtitle">实时监控 · IP分布 · 关键词分析</span>
+      <div class="header-right">
+        <div class="header-stat">
+          <span>总用户</span>
+          <span class="val" id="stat-users">-</span>
+        </div>
+        <div class="header-stat">
+          <span>总消息</span>
+          <span class="val" id="stat-messages">-</span>
+        </div>
+        <div class="header-stat">
+          <span>今日</span>
+          <span class="val" id="stat-today">-</span>
+        </div>
+        <div class="header-dot" title="WebSocket 已连接"></div>
+        <span style="font-size: 12px" id="ws-status">连接中...</span>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- Toast 容器 -->
-<div class="toast-container" id="toast-container"></div>
+    <!-- 主体 -->
+    <div class="main-grid">
+      <!-- 左上：中国地图 IP 分布 -->
+      <div class="panel">
+        <div class="panel-header">用户 IP 归属地分布</div>
+        <div class="panel-body" id="chart-map"></div>
+      </div>
 
-<script>
-// ==================== 配置 ====================
-const WS_URL = (() => {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return proto + '//' + location.host + '/ws/dashboard';
-})();
-const API_BASE = '';
+      <!-- 右上：词云图 -->
+      <div class="panel">
+        <div class="panel-header">用户消息关键词</div>
+        <div class="panel-body" id="chart-wordcloud"></div>
+      </div>
 
-// ==================== 全局状态 ====================
-let mapChart = null;
-let wordCloudChart = null;
-let alertLog = [];
+      <!-- 下半全宽：告警记录列表 -->
+      <div class="panel full-width">
+        <div class="panel-header">📞 人工介入告警记录（最近10条）</div>
+        <div style="overflow-y: auto; flex: 1; min-height: 0; padding: 12px 20px" id="alert-log">
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <div class="text">暂无告警，当前系统运行正常</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-// ==================== WebSocket ====================
-function connectWS() {
-  const statusEl = document.getElementById('ws-status');
-  const dotEl = document.querySelector('.header-dot');
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toast-container"></div>
 
-  const ws = new WebSocket(WS_URL);
+    <script>
+      // ==================== 配置 ====================
+      const WS_URL = (() => {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+        return proto + '//' + location.host + '/ws/dashboard'
+      })()
+      const API_BASE = ''
 
-  ws.onopen = () => {
-    statusEl.textContent = '已连接';
-    statusEl.style.color = '#22c55e';
-    dotEl.style.background = '#22c55e';
-    // 心跳
-    setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.send('ping');
-    }, 30000);
-  };
+      // ==================== 全局状态 ====================
+      let mapChart = null
+      let wordCloudChart = null
+      let alertLog = []
 
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'pong') return;
-      if (msg.type === 'alert') {
-        handleAlert(msg.data);
+      // ==================== WebSocket ====================
+      function connectWS() {
+        const statusEl = document.getElementById('ws-status')
+        const dotEl = document.querySelector('.header-dot')
+
+        const ws = new WebSocket(WS_URL)
+
+        ws.onopen = () => {
+          statusEl.textContent = '已连接'
+          statusEl.style.color = '#22c55e'
+          dotEl.style.background = '#22c55e'
+          // 心跳
+          setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) ws.send('ping')
+          }, 30000)
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'pong') return
+            if (msg.type === 'alert') {
+              handleAlert(msg.data)
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        ws.onclose = () => {
+          statusEl.textContent = '断开，5s后重连...'
+          statusEl.style.color = '#ef4444'
+          dotEl.style.background = '#ef4444'
+          setTimeout(connectWS, 5000)
+        }
+
+        ws.onerror = () => {
+          ws.close()
+        }
       }
-    } catch (e) {
-      // ignore
-    }
-  };
 
-  ws.onclose = () => {
-    statusEl.textContent = '断开，5s后重连...';
-    statusEl.style.color = '#ef4444';
-    dotEl.style.background = '#ef4444';
-    setTimeout(connectWS, 5000);
-  };
+      // ==================== Toast ====================
+      function showToast(alertData) {
+        const container = document.getElementById('toast-container')
+        const toast = document.createElement('div')
+        const isUrgent = alertData.intentType === 'urgent'
+        toast.className = 'toast' + (isUrgent ? ' urgent' : '')
 
-  ws.onerror = () => {
-    ws.close();
-  };
-}
+        const typeLabel = isUrgent ? '⚠ 紧急联络' : '📞 高意向咨询'
+        const student = alertData.studentName || '未知用户'
 
-// ==================== Toast ====================
-function showToast(alertData) {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  const isUrgent = alertData.intentType === 'urgent';
-  toast.className = 'toast' + (isUrgent ? ' urgent' : '');
-
-  const typeLabel = isUrgent ? '⚠ 紧急联络' : '📞 高意向咨询';
-  const student = alertData.studentName || '未知用户';
-
-  toast.innerHTML = `
+        toast.innerHTML = `
     <button class="toast-close" onclick="this.parentElement.remove()">×</button>
     <div class="toast-header">
       <span class="toast-dot"></span>
@@ -349,121 +377,154 @@ function showToast(alertData) {
       <span class="highlight">${escapeHtml(alertData.contact)}</span>，请尽快联系回访。
       ${alertData.messageSnippet ? '<br>触发消息：' + escapeHtml(alertData.messageSnippet.slice(0, 60)) : ''}
     </div>
-  `;
+  `
 
-  container.appendChild(toast);
+        container.appendChild(toast)
 
-  // 5秒后自动消失
-  setTimeout(() => {
-    if (toast.parentElement) {
-      toast.style.animation = 'toast-out 0.3s ease forwards';
-      setTimeout(() => toast.remove(), 300);
-    }
-  }, 5000);
+        // 5秒后自动消失
+        setTimeout(() => {
+          if (toast.parentElement) {
+            toast.style.animation = 'toast-out 0.3s ease forwards'
+            setTimeout(() => toast.remove(), 300)
+          }
+        }, 5000)
 
-  // 同时播放提示音（可选）
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 800;
-    gain.gain.value = 0.1;
-    osc.start();
-    osc.stop(ctx.currentTime + 0.15);
-  } catch(e) {}
-}
+        // 同时播放提示音（可选）
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)()
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.frequency.value = 800
+          gain.gain.value = 0.1
+          osc.start()
+          osc.stop(ctx.currentTime + 0.15)
+        } catch (e) {}
+      }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+      function escapeHtml(str) {
+        const div = document.createElement('div')
+        div.textContent = str
+        return div.innerHTML
+      }
 
-// ==================== 英→中省份映射（全称，与 DataV GeoJSON 特征名一致） ====================
-const EN_TO_CN_PROVINCE = {
-  'beijing': '北京市', 'tianjin': '天津市', 'shanghai': '上海市', 'chongqing': '重庆市',
-  'hebei': '河北省', 'shanxi': '山西省', 'liaoning': '辽宁省', 'jilin': '吉林省',
-  'heilongjiang': '黑龙江省', 'jiangsu': '江苏省', 'zhejiang': '浙江省', 'anhui': '安徽省',
-  'fujian': '福建省', 'jiangxi': '江西省', 'shandong': '山东省', 'henan': '河南省',
-  'hubei': '湖北省', 'hunan': '湖南省', 'guangdong': '广东省', 'hainan': '海南省',
-  'sichuan': '四川省', 'guizhou': '贵州省', 'yunnan': '云南省', 'shaanxi': '陕西省',
-  'gansu': '甘肃省', 'qinghai': '青海省', 'taiwan': '台湾省',
-  'inner mongolia': '内蒙古自治区', 'guangxi': '广西壮族自治区', 'tibet': '西藏自治区',
-  'ningxia': '宁夏回族自治区', 'ningxia hui': '宁夏回族自治区', 'xinjiang': '新疆维吾尔自治区',
-  'hong kong': '香港特别行政区', 'macau': '澳门特别行政区',
-};
+      // ==================== 英→中省份映射（全称，与 DataV GeoJSON 特征名一致） ====================
+      const EN_TO_CN_PROVINCE = {
+        beijing: '北京市',
+        tianjin: '天津市',
+        shanghai: '上海市',
+        chongqing: '重庆市',
+        hebei: '河北省',
+        shanxi: '山西省',
+        liaoning: '辽宁省',
+        jilin: '吉林省',
+        heilongjiang: '黑龙江省',
+        jiangsu: '江苏省',
+        zhejiang: '浙江省',
+        anhui: '安徽省',
+        fujian: '福建省',
+        jiangxi: '江西省',
+        shandong: '山东省',
+        henan: '河南省',
+        hubei: '湖北省',
+        hunan: '湖南省',
+        guangdong: '广东省',
+        hainan: '海南省',
+        sichuan: '四川省',
+        guizhou: '贵州省',
+        yunnan: '云南省',
+        shaanxi: '陕西省',
+        gansu: '甘肃省',
+        qinghai: '青海省',
+        taiwan: '台湾省',
+        'inner mongolia': '内蒙古自治区',
+        guangxi: '广西壮族自治区',
+        tibet: '西藏自治区',
+        ningxia: '宁夏回族自治区',
+        'ningxia hui': '宁夏回族自治区',
+        xinjiang: '新疆维吾尔自治区',
+        'hong kong': '香港特别行政区',
+        macau: '澳门特别行政区',
+      }
 
-/**
- * 从 ip2region / IP2Location 原始字符串提取省份中文名
- * ip2region 格式:   "中国|华东|浙江省|杭州市|电信"  → 省份在索引 [2]
- * IP2Location 格式: "China | Guangdong | Shenzhen" → 省份在索引 [1]，需英→中
- */
-function extractProvince(region) {
-  if (!region) return '';
+      /**
+       * 从 ip2region / IP2Location 原始字符串提取省份中文名
+       * ip2region 格式:   "中国|华东|浙江省|杭州市|电信"  → 省份在索引 [2]
+       * IP2Location 格式: "China | Guangdong | Shenzhen" → 省份在索引 [1]，需英→中
+       */
+      function extractProvince(region) {
+        if (!region) return ''
 
-  // IP2Location 英文格式: " | " 分隔
-  if (region.includes(' | ')) {
-    var parts = region.split(' | ');
-    var raw = (parts[1] || '').trim();
-    if (!raw) return '';
-    var lower = raw.toLowerCase();
-    if (EN_TO_CN_PROVINCE[lower]) return EN_TO_CN_PROVINCE[lower];
-    for (var key in EN_TO_CN_PROVINCE) {
-      if (lower.indexOf(key) !== -1 || key.indexOf(lower) !== -1) return EN_TO_CN_PROVINCE[key];
-    }
-    return raw;
-  }
+        // IP2Location 英文格式: " | " 分隔
+        if (region.includes(' | ')) {
+          var parts = region.split(' | ')
+          var raw = (parts[1] || '').trim()
+          if (!raw) return ''
+          var lower = raw.toLowerCase()
+          if (EN_TO_CN_PROVINCE[lower]) return EN_TO_CN_PROVINCE[lower]
+          for (var key in EN_TO_CN_PROVINCE) {
+            if (lower.indexOf(key) !== -1 || key.indexOf(lower) !== -1)
+              return EN_TO_CN_PROVINCE[key]
+          }
+          return raw
+        }
 
-  // ip2region 中文格式: "|" 分隔，5 字段
-  var parts = region.split('|');
-  if (parts.length >= 3) return (parts[2] || '').trim();
-  if (parts.length === 2) return (parts[1] || '').trim();
-  return region.trim();
-}
+        // ip2region 中文格式: "|" 分隔，5 字段
+        var parts = region.split('|')
+        if (parts.length >= 3) return (parts[2] || '').trim()
+        if (parts.length === 2) return (parts[1] || '').trim()
+        return region.trim()
+      }
 
-function normalizeProvince(province) {
-  return province
-    .replace(/省$/, '').replace(/市$/, '')
-    .replace(/自治区$/, '').replace(/壮族$/, '').replace(/回族$/, '').replace(/维吾尔$/, '')
-    .replace(/特别行政区$/, '').replace(/行政区$/, '')
-    .trim();
-}
+      function normalizeProvince(province) {
+        return province
+          .replace(/省$/, '')
+          .replace(/市$/, '')
+          .replace(/自治区$/, '')
+          .replace(/壮族$/, '')
+          .replace(/回族$/, '')
+          .replace(/维吾尔$/, '')
+          .replace(/特别行政区$/, '')
+          .replace(/行政区$/, '')
+          .trim()
+      }
 
-function buildProvinceMap(rawData) {
-  var map = {};
-  rawData.forEach(function(item) {
-    var p = extractProvince(item.region);
-    if (p) map[p] = (map[p] || 0) + item.user_count;
-  });
-  return map;
-}
+      function buildProvinceMap(rawData) {
+        var map = {}
+        rawData.forEach(function (item) {
+          var p = extractProvince(item.region)
+          if (p) map[p] = (map[p] || 0) + item.user_count
+        })
+        return map
+      }
 
-// ==================== 告警处理 ====================
-function handleAlert(data) {
-  // Toast 通知
-  showToast(data);
+      // ==================== 告警处理 ====================
+      function handleAlert(data) {
+        // Toast 通知
+        showToast(data)
 
-  // 记录到告警列表
-  alertLog.unshift(data);
-  if (alertLog.length > 10) alertLog = alertLog.slice(0, 10);
-  renderAlertLog();
-}
+        // 记录到告警列表
+        alertLog.unshift(data)
+        if (alertLog.length > 10) alertLog = alertLog.slice(0, 10)
+        renderAlertLog()
+      }
 
-function renderAlertLog() {
-  const el = document.getElementById('alert-log');
-  if (alertLog.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div class="text">暂无告警</div></div>';
-    return;
-  }
+      function renderAlertLog() {
+        const el = document.getElementById('alert-log')
+        if (alertLog.length === 0) {
+          el.innerHTML =
+            '<div class="empty-state"><div class="icon">📭</div><div class="text">暂无告警</div></div>'
+          return
+        }
 
-  const rows = alertLog.map((a, i) => {
-    const isUrgent = a.intentType === 'urgent';
-    const badge = isUrgent
-      ? '<span style="color:#ef4444;font-weight:700;">⚠ 紧急</span>'
-      : '<span style="color:#f59e0b;font-weight:600;">📞 高意向</span>';
-    return `
+        const rows = alertLog
+          .map((a, i) => {
+            const isUrgent = a.intentType === 'urgent'
+            const badge = isUrgent
+              ? '<span style="color:#ef4444;font-weight:700;">⚠ 紧急</span>'
+              : '<span style="color:#f59e0b;font-weight:600;">📞 高意向</span>'
+            return `
       <div style="display:flex;align-items:center;gap:16px;padding:10px 12px;border-bottom:1px solid #111827;
                   ${i === 0 ? 'background:rgba(79,172,254,0.05);border-radius:6px;' : ''}">
         <span style="font-size:12px;color:#4a5568;min-width:48px;">${a.time}</span>
@@ -474,258 +535,292 @@ function renderAlertLog() {
           <span style="color:#4facfe;">${escapeHtml(a.contact)}</span>
           ${a.messageSnippet ? '&nbsp;·&nbsp;<span style="color:#5a6a80;font-size:12px;">' + escapeHtml(a.messageSnippet.slice(0, 50)) + '</span>' : ''}
         </span>
-      </div>`;
-  }).join('');
+      </div>`
+          })
+          .join('')
 
-  el.innerHTML = rows;
-}
-
-// ==================== 加载中国地图 GeoJSON ====================
-async function loadChinaGeoJSON() {
-  // 使用 DataV 提供的中国地图 GeoJSON（含省份）
-  const urls = [
-    'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
-    'https://geo.datav.aliyun.com/areas_v3/bound/100000.json',
-  ];
-
-  for (const url of urls) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const json = await resp.json();
-        echarts.registerMap('china', json);
-        return true;
+        el.innerHTML = rows
       }
-    } catch (e) {
-      // try next
-    }
-  }
-  return false;
-}
 
-// ==================== 初始化地图 ====================
-async function initMapChart() {
-  const dom = document.getElementById('chart-map');
-  mapChart = echarts.init(dom, 'dark');
+      // ==================== 加载中国地图 GeoJSON ====================
+      async function loadChinaGeoJSON() {
+        // 使用 DataV 提供的中国地图 GeoJSON（含省份）
+        const urls = [
+          'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
+          'https://geo.datav.aliyun.com/areas_v3/bound/100000.json',
+        ]
 
-  const loaded = await loadChinaGeoJSON();
-  if (!loaded) {
-    mapChart.setOption({
-      title: { text: '地图数据加载失败', left: 'center', top: 'center', textStyle: { color: '#5a6a80', fontSize: 14 } }
-    });
-    return;
-  }
-
-  // 拉取后端分布数据
-  try {
-    const resp = await fetch(API_BASE + '/api/dashboard/ip-distribution');
-    const json = await resp.json();
-    const rawData = json.data || [];
-
-    const provinceMap = buildProvinceMap(rawData);
-
-    // 转换为 ECharts 地图数据格式
-    const mapData = Object.entries(provinceMap).map(([name, value]) => ({
-      name,
-      value,
-    }));
-
-    mapChart.setOption({
-      tooltip: {
-        trigger: 'item',
-        formatter: (params) => {
-          return params.name + '<br/>用户数：<strong>' + (params.value || 0) + '</strong>';
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url)
+            if (resp.ok) {
+              const json = await resp.json()
+              echarts.registerMap('china', json)
+              return true
+            }
+          } catch (e) {
+            // try next
+          }
         }
-      },
-      visualMap: {
-        min: 0,
-        max: Math.max(...mapData.map(d => d.value), 10),
-        left: 'left',
-        bottom: 20,
-        text: ['高', '低'],
-        inRange: {
-          color: ['#0f1923', '#0d3b66', '#1b6ca8', '#4facfe', '#00f2fe']
-        },
-        calculable: true,
-        textStyle: { color: '#5a6a80' },
-      },
-      geo: {
-        map: 'china',
-        roam: true,
-        zoom: 1.15,
-        center: [104.5, 36],
-        label: {
-          show: true,
-          fontSize: 10,
-          color: '#3a4a5a',
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 14,
-            color: '#e0e6ed',
-          },
-          itemStyle: {
-            areaColor: '#1b6ca8',
-          },
-        },
-        itemStyle: {
-          areaColor: '#0f1923',
-          borderColor: '#1a2a3a',
-          borderWidth: 1.2,
-        },
-      },
-      series: [{
-        name: '用户数',
-        type: 'map',
-        map: 'china',
-        geoIndex: 0,
-        data: mapData,
-      }],
-    });
-  } catch (e) {
-    console.error('加载地图数据失败:', e);
-    mapChart.setOption({
-      title: { text: '数据加载异常', left: 'center', top: 'center', textStyle: { color: '#5a6a80', fontSize: 14 } }
-    });
-  }
-}
-
-// ==================== 初始化词云 ====================
-async function initWordCloudChart() {
-  const dom = document.getElementById('chart-wordcloud');
-  wordCloudChart = echarts.init(dom, 'dark');
-
-  try {
-    const resp = await fetch(API_BASE + '/api/dashboard/keywords?days=7&limit=40');
-    const json = await resp.json();
-    const rawData = json.data || [];
-
-    if (rawData.length === 0) {
-      wordCloudChart.setOption({
-        title: { text: '暂无关键词数据', left: 'center', top: 'center', textStyle: { color: '#5a6a80', fontSize: 14 } }
-      });
-      return;
-    }
-
-    const maxCount = Math.max(...rawData.map(d => d.count));
-    const wordCloudData = rawData.map(item => ({
-      name: item.word,
-      value: item.count,
-      textStyle: {
-        color: getRandomColor(item.count / maxCount),
-      },
-    }));
-
-    wordCloudChart.setOption({
-      tooltip: {
-        formatter: (params) => params.name + ': <strong>' + params.value + '</strong> 次',
-      },
-      series: [{
-        type: 'wordCloud',
-        shape: 'circle',
-        left: 'center',
-        top: 'center',
-        width: '90%',
-        height: '90%',
-        sizeRange: [14, 52],
-        rotationRange: [-30, 30],
-        rotationStep: 15,
-        gridSize: 8,
-        drawOutOfBound: false,
-        layoutAnimation: true,
-        textStyle: {
-          fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
-          fontWeight: 'normal',
-        },
-        emphasis: {
-          textStyle: {
-            shadowBlur: 10,
-            shadowColor: 'rgba(79,172,254,0.5)',
-          },
-        },
-        data: wordCloudData,
-      }],
-    });
-  } catch (e) {
-    console.error('加载词云数据失败:', e);
-    wordCloudChart.setOption({
-      title: { text: '数据加载异常', left: 'center', top: 'center', textStyle: { color: '#5a6a80', fontSize: 14 } }
-    });
-  }
-}
-
-function getRandomColor(intensity) {
-  // 根据权重在靛蓝-青色渐变中取值
-  const colors = [
-    '#4facfe', '#00f2fe', '#1b6ca8', '#0d3b66',
-    '#5b8cce', '#48c6ef', '#6dd5ed', '#2193b0',
-    '#6c8cd9', '#36d1dc', '#3a7bd5', '#00d2ff',
-  ];
-  return colors[Math.floor(Math.random() * colors.length)];
-}
-
-// ==================== 加载概览数据 ====================
-async function loadOverview() {
-  try {
-    const resp = await fetch(API_BASE + '/api/dashboard/overview');
-    const json = await resp.json();
-    const data = json.data || {};
-    document.getElementById('stat-users').textContent = data.total_users ?? '-';
-    document.getElementById('stat-messages').textContent = data.total_messages ?? '-';
-    document.getElementById('stat-today').textContent = data.today_messages ?? '-';
-  } catch (e) {
-    console.error('加载概览失败:', e);
-  }
-}
-
-// ==================== 窗口大小调整 ====================
-window.addEventListener('resize', () => {
-  mapChart?.resize();
-  wordCloudChart?.resize();
-});
-
-// ==================== 启动 ====================
-(async function init() {
-  // 拉取概览
-  await loadOverview();
-
-  // 并行初始化两个图表
-  await Promise.all([initMapChart(), initWordCloudChart()]);
-
-  // 连接 WebSocket
-  connectWS();
-
-  // 定时刷新数据（每 60 秒）
-  setInterval(async () => {
-    await loadOverview();
-    // 重新拉取图表数据
-    try {
-      // 刷新地图数据
-      const mapResp = await fetch(API_BASE + '/api/dashboard/ip-distribution');
-      const mapJson = await mapResp.json();
-      if (mapChart && !mapChart.isDisposed()) {
-        const rawData = mapJson.data || [];
-        const provinceMap = buildProvinceMap(rawData);
-        const mapData = Object.entries(provinceMap).map(([name, value]) => ({ name, value }));
-        mapChart.setOption({ series: [{ data: mapData }] });
+        return false
       }
 
-      // 刷新词云数据
-      const wcResp = await fetch(API_BASE + '/api/dashboard/keywords?days=7&limit=40');
-      const wcJson = await wcResp.json();
-      if (wordCloudChart && !wordCloudChart.isDisposed()) {
-        const wcData = (wcJson.data || []).map(item => ({
-          name: item.word,
-          value: item.count,
-        }));
-        wordCloudChart.setOption({ series: [{ data: wcData }] });
+      // ==================== 初始化地图 ====================
+      async function initMapChart() {
+        const dom = document.getElementById('chart-map')
+        mapChart = echarts.init(dom, 'dark')
+
+        const loaded = await loadChinaGeoJSON()
+        if (!loaded) {
+          mapChart.setOption({
+            title: {
+              text: '地图数据加载失败',
+              left: 'center',
+              top: 'center',
+              textStyle: { color: '#5a6a80', fontSize: 14 },
+            },
+          })
+          return
+        }
+
+        // 拉取后端分布数据
+        try {
+          const resp = await fetch(API_BASE + '/api/dashboard/ip-distribution')
+          const json = await resp.json()
+          const rawData = json.data || []
+
+          const provinceMap = buildProvinceMap(rawData)
+
+          // 转换为 ECharts 地图数据格式
+          const mapData = Object.entries(provinceMap).map(([name, value]) => ({
+            name,
+            value,
+          }))
+
+          mapChart.setOption({
+            tooltip: {
+              trigger: 'item',
+              formatter: (params) => {
+                return params.name + '<br/>用户数：<strong>' + (params.value || 0) + '</strong>'
+              },
+            },
+            visualMap: {
+              min: 0,
+              max: Math.max(...mapData.map((d) => d.value), 10),
+              left: 'left',
+              bottom: 20,
+              text: ['高', '低'],
+              inRange: {
+                color: ['#0f1923', '#0d3b66', '#1b6ca8', '#4facfe', '#00f2fe'],
+              },
+              calculable: true,
+              textStyle: { color: '#5a6a80' },
+            },
+            geo: {
+              map: 'china',
+              roam: true,
+              zoom: 1.15,
+              center: [104.5, 36],
+              label: {
+                show: true,
+                fontSize: 10,
+                color: '#3a4a5a',
+              },
+              emphasis: {
+                label: {
+                  show: true,
+                  fontSize: 14,
+                  color: '#e0e6ed',
+                },
+                itemStyle: {
+                  areaColor: '#1b6ca8',
+                },
+              },
+              itemStyle: {
+                areaColor: '#0f1923',
+                borderColor: '#1a2a3a',
+                borderWidth: 1.2,
+              },
+            },
+            series: [
+              {
+                name: '用户数',
+                type: 'map',
+                map: 'china',
+                geoIndex: 0,
+                data: mapData,
+              },
+            ],
+          })
+        } catch (e) {
+          console.error('加载地图数据失败:', e)
+          mapChart.setOption({
+            title: {
+              text: '数据加载异常',
+              left: 'center',
+              top: 'center',
+              textStyle: { color: '#5a6a80', fontSize: 14 },
+            },
+          })
+        }
       }
-    } catch (e) {
-      console.error('刷新图表数据失败:', e);
-    }
-  }, 60000);
-})();
-</script>
-</body>
+
+      // ==================== 初始化词云 ====================
+      async function initWordCloudChart() {
+        const dom = document.getElementById('chart-wordcloud')
+        wordCloudChart = echarts.init(dom, 'dark')
+
+        try {
+          const resp = await fetch(API_BASE + '/api/dashboard/keywords?days=7&limit=40')
+          const json = await resp.json()
+          const rawData = json.data || []
+
+          if (rawData.length === 0) {
+            wordCloudChart.setOption({
+              title: {
+                text: '暂无关键词数据',
+                left: 'center',
+                top: 'center',
+                textStyle: { color: '#5a6a80', fontSize: 14 },
+              },
+            })
+            return
+          }
+
+          const maxCount = Math.max(...rawData.map((d) => d.count))
+          const wordCloudData = rawData.map((item) => ({
+            name: item.word,
+            value: item.count,
+            textStyle: {
+              color: getRandomColor(item.count / maxCount),
+            },
+          }))
+
+          wordCloudChart.setOption({
+            tooltip: {
+              formatter: (params) => params.name + ': <strong>' + params.value + '</strong> 次',
+            },
+            series: [
+              {
+                type: 'wordCloud',
+                shape: 'circle',
+                left: 'center',
+                top: 'center',
+                width: '90%',
+                height: '90%',
+                sizeRange: [14, 52],
+                rotationRange: [-30, 30],
+                rotationStep: 15,
+                gridSize: 8,
+                drawOutOfBound: false,
+                layoutAnimation: true,
+                textStyle: {
+                  fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
+                  fontWeight: 'normal',
+                },
+                emphasis: {
+                  textStyle: {
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(79,172,254,0.5)',
+                  },
+                },
+                data: wordCloudData,
+              },
+            ],
+          })
+        } catch (e) {
+          console.error('加载词云数据失败:', e)
+          wordCloudChart.setOption({
+            title: {
+              text: '数据加载异常',
+              left: 'center',
+              top: 'center',
+              textStyle: { color: '#5a6a80', fontSize: 14 },
+            },
+          })
+        }
+      }
+
+      function getRandomColor(intensity) {
+        // 根据权重在靛蓝-青色渐变中取值
+        const colors = [
+          '#4facfe',
+          '#00f2fe',
+          '#1b6ca8',
+          '#0d3b66',
+          '#5b8cce',
+          '#48c6ef',
+          '#6dd5ed',
+          '#2193b0',
+          '#6c8cd9',
+          '#36d1dc',
+          '#3a7bd5',
+          '#00d2ff',
+        ]
+        return colors[Math.floor(Math.random() * colors.length)]
+      }
+
+      // ==================== 加载概览数据 ====================
+      async function loadOverview() {
+        try {
+          const resp = await fetch(API_BASE + '/api/dashboard/overview')
+          const json = await resp.json()
+          const data = json.data || {}
+          document.getElementById('stat-users').textContent = data.total_users ?? '-'
+          document.getElementById('stat-messages').textContent = data.total_messages ?? '-'
+          document.getElementById('stat-today').textContent = data.today_messages ?? '-'
+        } catch (e) {
+          console.error('加载概览失败:', e)
+        }
+      }
+
+      // ==================== 窗口大小调整 ====================
+      window.addEventListener('resize', () => {
+        mapChart?.resize()
+        wordCloudChart?.resize()
+      })
+
+      // ==================== 启动 ====================
+      ;(async function init() {
+        // 拉取概览
+        await loadOverview()
+
+        // 并行初始化两个图表
+        await Promise.all([initMapChart(), initWordCloudChart()])
+
+        // 连接 WebSocket
+        connectWS()
+
+        // 定时刷新数据（每 60 秒）
+        setInterval(async () => {
+          await loadOverview()
+          // 重新拉取图表数据
+          try {
+            // 刷新地图数据
+            const mapResp = await fetch(API_BASE + '/api/dashboard/ip-distribution')
+            const mapJson = await mapResp.json()
+            if (mapChart && !mapChart.isDisposed()) {
+              const rawData = mapJson.data || []
+              const provinceMap = buildProvinceMap(rawData)
+              const mapData = Object.entries(provinceMap).map(([name, value]) => ({ name, value }))
+              mapChart.setOption({ series: [{ data: mapData }] })
+            }
+
+            // 刷新词云数据
+            const wcResp = await fetch(API_BASE + '/api/dashboard/keywords?days=7&limit=40')
+            const wcJson = await wcResp.json()
+            if (wordCloudChart && !wordCloudChart.isDisposed()) {
+              const wcData = (wcJson.data || []).map((item) => ({
+                name: item.word,
+                value: item.count,
+              }))
+              wordCloudChart.setOption({ series: [{ data: wcData }] })
+            }
+          } catch (e) {
+            console.error('刷新图表数据失败:', e)
+          }
+        }, 60000)
+      })()
+    </script>
+  </body>
 </html>
