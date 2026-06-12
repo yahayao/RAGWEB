@@ -78,16 +78,9 @@
         <div v-for="message in chatStore.messages" :key="message.id" :class="['message-row', message.role]">
           <div v-if="message.role === 'assistant'" class="avatar assistant-avatar">AI</div>
           <div class="bubble-wrapper">
-            <div class="thinking-indicator" v-if="shouldShowThinkingIndicator(message)">
-              思考中
-            </div>
-            <div class="thinking-context"
-              v-if="message.role === 'assistant' && chatStore.isShowThinking && hasThinkContent(message.content)">
-              {{ getThinkContent(message.content) }}
-            </div>
             <div class="message-bubble" :class="{ 'markdown-body': message.role === 'assistant' }"
-              v-if="message.role === 'assistant'" v-html="renderMarkdown(getDisplayContent(message.content))"></div>
-            <div class="message-bubble" v-else>{{ getDisplayContent(message.content) }}</div>
+              v-if="message.role === 'assistant'" v-html="renderMarkdown(message.content)"></div>
+            <div class="message-bubble" v-else>{{ message.content }}</div>
           </div>
           <div v-if="message.role === 'user'" class="avatar user-avatar">你</div>
         </div>
@@ -112,15 +105,6 @@
           找不到人工入口？<a href="#" @click.prevent="openContactModal">点击这里联系招生老师</a>
         </div>
         <div class="input-box">
-          <button class="deep-think-btn" :class="{ active: chatStore.isDeepThinking }"
-            @click="chatStore.toggleDeepThinking()" title="深度思考">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
-              <path
-                d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6L15 17H9l-.7-2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span class="btn-label">深度思考</span>
-          </button>
           <textarea v-model="inputText" placeholder="发送消息给 AI 助手..." @keydown.enter.exact.prevent="handleSend"
             rows="1"></textarea>
           <!-- 新增的麦克风按钮 -->
@@ -512,8 +496,6 @@ const sendAudioToWhisper = async (audioBlob: Blob): Promise<string> => {
 
 const messageListRef = ref<HTMLElement | null>(null)
 
-const hasThinkContent = (content: string) => content.includes('<think>')
-
 const isThinkingInProgress = (content: string) => {
   const start = content.indexOf('<think>')
   if (start === -1) return false
@@ -529,48 +511,13 @@ const isCurrentStreamingAssistantMessage = (message: Message) => {
   return lastMessage.id === message.id
 }
 
-const shouldShowThinkingIndicator = (message: Message) => {
-  if (message.role !== 'assistant') return false
-
-  // 1) 后端返回 <think>...</think> 时，按标签精确显示/隐藏
-  if (isThinkingInProgress(message.content)) return true
-
-  // 2) 后端在流式阶段过滤了 think 标签时，AI 正在生成且正文尚未出现，视为思考中
-  if (isCurrentStreamingAssistantMessage(message) && !getDisplayContent(message.content)) {
-    return true
-  }
-
-  return false
-}
-
 const isContextLengthExceededError = (errorMsg: string) => {
   return /CONTEXT_OVERFLOW|context_length_exceeded|maximum\s+context\s+length|max\s*context\s*length|context\s*window|too\s+many\s+tokens|token\s+limit|input\s+is\s+too\s+long|prompt\s+is\s+too\s+long|超出.{0,8}上下文|上下文.{0,8}(超|长|限)|输入内容过长|轮次上限/i.test(
     errorMsg,
   )
 }
 
-const getThinkContent = (content: string) => {
-  const start = content.indexOf('<think>')
-  if (start === -1) return ''
-  const end = content.indexOf('</think>', start)
-  if (end === -1) {
-    // </think> 尚未到达，流式进行中，显示 <think> 之后的所有内容
-    return content.slice(start + 7).trim()
-  }
-  return content.slice(start + 7, end).trim()
-}
-
-const getDisplayContent = (content: string) => {
-  const start = content.indexOf('<think>')
-  if (start === -1) return content.trim()
-  const end = content.indexOf('</think>', start)
-  if (end === -1) {
-    // 仍在思考中，普通气泡只显示 <think> 之前的内容（通常为空）
-    return content.slice(0, start).trim()
-  }
-  // <think> 之前 + </think> 之后的内容合并显示
-  return (content.slice(0, start) + content.slice(end + 8)).trim()
-}
+const getDisplayContent = (content: string) => content.trim()
 
 const scrollToBottom = async () => {
   await nextTick()
@@ -613,9 +560,6 @@ const handleSend = async () => {
   const requestData: ChatRequest = {
     question: userMessage.content,
     history: history.length > 0 ? history : undefined,
-    enable_thinking: chatStore.isDeepThinking,
-    return_thinking: chatStore.isShowThinking,
-    preserve_thinking: chatStore.isShowThinking,
   }
 
   const checkAndShowAlert = () => {

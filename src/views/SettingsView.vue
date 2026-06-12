@@ -25,33 +25,6 @@
     </div>
 
     <!-- 流式输出开关 -->
-    <div class="setting-item setting-item--row">
-      <div class="setting-label-group">
-        <label>流式输出</label>
-        <span class="setting-desc">开启后 AI 回复将逐字实时显示</span>
-      </div>
-      <button class="toggle-btn" :class="{ 'toggle-btn--on': chatStore.isStreaming }"
-        @click="chatStore.toggleStreaming()" :aria-label="chatStore.isStreaming ? '关闭流式输出' : '开启流式输出'">
-        <span class="toggle-track">
-          <span class="toggle-thumb"></span>
-        </span>
-        <span class="toggle-text">{{ chatStore.isStreaming ? '已开启' : '已关闭' }}</span>
-      </button>
-    </div>
-
-    <div class="setting-item setting-item--row">
-      <div class="setting-label-group">
-        <label>显示思考内容</label>
-        <span class="setting-desc">开启后可在聊天气泡上方查看思考内容</span>
-      </div>
-      <button class="toggle-btn" :class="{ 'toggle-btn--on': chatStore.isShowThinking }"
-        @click="chatStore.toggleShowThinking()" :aria-label="chatStore.isShowThinking ? '关闭思考内容显示' : '开启思考内容显示'">
-        <span class="toggle-track">
-          <span class="toggle-thumb"></span>
-        </span>
-        <span class="toggle-text">{{ chatStore.isShowThinking ? '已开启' : '已关闭' }}</span>
-      </button>
-    </div>
   </div>
 </template>
 

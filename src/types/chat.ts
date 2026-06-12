@@ -30,9 +30,6 @@ export interface ChatRequest {
   max_tokens?: number
   top_p?: number
   stream?: boolean
-  enable_thinking?: boolean
-  return_thinking?: boolean
-  preserve_thinking?: boolean
   system_prompt_prefix?: string
 }
 
