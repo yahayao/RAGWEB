@@ -20,8 +20,7 @@
       <label>模型选择</label>
       <select v-model="selectedModel">
         <option value="Qwen3-14B">Qwen3-14B</option>
-        <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
-        <option value="gpt-4">GPT-4</option>
+        <option value="Qwen3.6-35B-A3B">Qwen3.6-35B-A3B</option>
       </select>
     </div>
 

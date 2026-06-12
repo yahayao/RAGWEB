@@ -615,6 +615,7 @@ const handleSend = async () => {
     history: history.length > 0 ? history : undefined,
     enable_thinking: chatStore.isDeepThinking,
     return_thinking: chatStore.isShowThinking,
+    preserve_thinking: chatStore.isShowThinking,
   }
 
   const checkAndShowAlert = () => {

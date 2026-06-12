@@ -32,6 +32,7 @@ export interface ChatRequest {
   stream?: boolean
   enable_thinking?: boolean
   return_thinking?: boolean
+  preserve_thinking?: boolean
   system_prompt_prefix?: string
 }
 
