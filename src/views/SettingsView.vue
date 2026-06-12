@@ -25,6 +25,19 @@
     </div>
 
     <!-- 流式输出开关 -->
+    <div class="setting-item setting-item--row">
+      <div class="setting-label-group">
+        <label>流式输出</label>
+        <span class="setting-desc">开启后 AI 回复将逐字实时显示</span>
+      </div>
+      <button class="toggle-btn" :class="{ 'toggle-btn--on': chatStore.isStreaming }"
+        @click="chatStore.toggleStreaming()" :aria-label="chatStore.isStreaming ? '关闭流式输出' : '开启流式输出'">
+        <span class="toggle-track">
+          <span class="toggle-thumb"></span>
+        </span>
+        <span class="toggle-text">{{ chatStore.isStreaming ? '已开启' : '已关闭' }}</span>
+      </button>
+    </div>
   </div>
 </template>
 

@@ -78,6 +78,9 @@
         <div v-for="message in chatStore.messages" :key="message.id" :class="['message-row', message.role]">
           <div v-if="message.role === 'assistant'" class="avatar assistant-avatar">AI</div>
           <div class="bubble-wrapper">
+            <div class="thinking-indicator" v-if="message.role === 'assistant' && isCurrentStreamingAssistantMessage(message) && !message.content">
+              思考中
+            </div>
             <div class="message-bubble" :class="{ 'markdown-body': message.role === 'assistant' }"
               v-if="message.role === 'assistant'" v-html="renderMarkdown(message.content)"></div>
             <div class="message-bubble" v-else>{{ message.content }}</div>
@@ -85,10 +88,11 @@
           <div v-if="message.role === 'user'" class="avatar user-avatar">你</div>
         </div>
 
-        <!-- 加载动画（流式模式下由气泡本身展示进度，不再显示三点动画）-->
+        <!-- 非流式等待动画 -->
         <div v-if="chatStore.isLoading && !chatStore.isStreaming" class="message-row assistant">
           <div class="avatar assistant-avatar">AI</div>
           <div class="bubble-wrapper">
+            <div class="thinking-indicator">思考中</div>
             <div class="message-bubble loading-bubble">
               <span class="dot"></span>
               <span class="dot"></span>
