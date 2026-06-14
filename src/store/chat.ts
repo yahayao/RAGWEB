@@ -17,7 +17,7 @@ export const useChatStore = defineStore('chat', {
     currentUserId: localStorage.getItem('chat_user_id') ?? '',
 
     showContactModal: false,
-    pendingAlertType: null, 
+    pendingAlertType: null as 'high_intent' | 'urgent' | null, 
     contactInfo: { 
       phone: ''
     },
