@@ -707,7 +707,7 @@ const submitContactForm = async () => {
       sessionId: chatStore.currentSessionId,
       intentType: chatStore.pendingAlertType || 'high_intent',
       messageSnippet: '用户触发了高意向关键词',
-      studentName: ''
+      studentName: chatStore.currentUserId,
     })
     chatStore.markContactCompleted()
     showContactModal.value = false

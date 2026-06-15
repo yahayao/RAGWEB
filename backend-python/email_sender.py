@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # ==================== 邮件配置 ====================
 
 SMTP_SENDER = "aohelper@bnbu.edu.cn"
-SMTP_SENDER_NAME = "招生助手提醒系统"
+SMTP_SENDER_NAME = "招生助手提醒"
 
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
@@ -37,7 +37,7 @@ ALERT_RECIPIENTS: list[str] = [
     # "teacher1@bnbu.edu.cn",
     "u430026005@mail.bnbu.edu.cn",
     "u430026183@mail.bnbu.edu.cn",
-    "u430026047@mail.bnbu.edu.cn",
+    "u430016047@mail.bnbu.edu.cn",
     "u430026175@mail.bnbu.edu.cn",
     "u430026130@mail.bnbu.edu.cn",
 ]
@@ -225,7 +225,7 @@ def send_alert_email_sync(alert_data: dict[str, Any]) -> bool:
     html = _build_html_body(**alert_data)
 
     msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = f"[RAGWEB 告警] {alert_data.get('intent_type', 'unknown')} — {alert_data.get('contact', '')}"
+    msg["Subject"] = f"[招生系统提醒] {alert_data.get('intent_type', 'unknown')} — {alert_data.get('contact', '')}"
     msg["From"] = formataddr((SMTP_SENDER_NAME, SMTP_SENDER))
     msg["To"] = ", ".join(ALERT_RECIPIENTS)
     msg["Date"] = formatdate(localtime=True)
