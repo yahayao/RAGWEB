@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="chat-container" :class="{ 'dark-theme': chatStore.isDarkTheme }">
     <!-- 左侧边栏 -->
     <aside class="sidebar">
@@ -78,7 +78,8 @@
         <div v-for="message in chatStore.messages" :key="message.id" :class="['message-row', message.role]">
           <div v-if="message.role === 'assistant'" class="avatar assistant-avatar">AI</div>
           <div class="bubble-wrapper">
-            <div class="thinking-indicator" v-if="message.role === 'assistant' && isCurrentStreamingAssistantMessage(message) && !message.content">
+            <div class="thinking-indicator"
+              v-if="message.role === 'assistant' && isCurrentStreamingAssistantMessage(message) && !message.content">
               思考中
             </div>
             <div class="message-bubble" :class="{ 'markdown-body': message.role === 'assistant' }"
@@ -164,17 +165,14 @@
       <div class="modal-title">📞 老师将尽快联系您</div>
       <p class="modal-desc">请输入您的联系方式，我们将安排招生老师为您详细解答。</p>
       <div class="modal-input-group">
-        <input 
-          v-model="contactForm.phone" 
-          type="tel" 
-          placeholder="手机号 (必填)" 
-          class="modal-input"
-          @keydown.enter="submitContactForm"
-        />
+        <input v-model="contactForm.phone" type="tel" placeholder="手机号 (必填)" class="modal-input"
+          :class="{ 'input-error-border': phoneError }" @keydown.enter="submitContactForm"
+          @input="validatePhoneOnInput" />
+        <p v-if="phoneError" class="phone-error-text">{{ phoneError }}</p>
       </div>
       <div class="modal-actions">
         <button class="modal-cancel-btn" @click="handleModalCancel">取消</button>
-        <button class="modal-confirm-btn" @click="submitContactForm" :disabled="!contactForm.phone">
+        <button class="modal-confirm-btn" @click="submitContactForm" :disabled="!isPhoneValid">
           提交并联系老师
         </button>
       </div>
@@ -183,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useChatStore } from '../store/chat'
 import { sendMessage, sendMessageStream } from '../api/chat'
 import type { Message, ChatRequest, HistoryItem } from '../types'
@@ -195,7 +193,7 @@ import DOMPurify from 'dompurify'
 // ===== 新增代码（仅加这两行）=====
 import { saveChatRecord } from '../api/chat' // 导入保存数据库的接口
 import type { ChatRecord } from '../types/chat' // 导入数据库记录类型
-import { sendAlertToTeacher} from '../api/chat'
+import { sendAlertToTeacher } from '../api/chat'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -207,6 +205,26 @@ const contactForm = ref({
   phone: ''
 })
 
+const phoneError = ref('')
+
+const validatePhone = (phone: string): string => {
+  const cleaned = phone.replace(/\s+/g, '')
+  if (!cleaned) return ''
+  if (!/^1\d{10}$/.test(cleaned)) return '请输入正确的11位手机号'
+  return ''
+}
+
+const isPhoneValid = computed(() => {
+  if (!contactForm.value.phone) return false
+  return !validatePhone(contactForm.value.phone)
+})
+
+const validatePhoneOnInput = () => {
+  phoneError.value = validatePhone(contactForm.value.phone)
+}
+
+
+// ===== 关键词常量定义 =====
 const KEYWORDS = {
   HIGH_INTENT: [
     '第一志愿', '第一选择', '很想来', '想把贵校', '冲一冲', '稳录', '保底',
@@ -219,32 +237,9 @@ const KEYWORDS = {
   ]
 }
 
-const mockBackendAlert = (phoneNumber: string, userMessage: string) => {
-  // 模拟网络延迟，让前端看到“发送中”的状态
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const currentTime = new Date().toLocaleString()
-      const mockResponseData = {
-        success: true,
-        message: '模拟发送成功（实际未发短信）',
-        data: {
-          to: phoneNumber,
-          content: `用户【${phoneNumber}】在 ${currentTime} 留言：${userMessage}。请负责老师尽快联系！`,
-          timestamp: Date.now()
-        }
-      }
-      
-      // 在控制台打印“假数据”，这就是你的测试证据
-      console.log('%c [Mock API Response] 收到线索：', 'color: #4CAF50; font-weight: bold;', mockResponseData)
-      
-      resolve(mockResponseData)
-    }, 800) // 0.8秒延迟，模拟网络请求
-  })
-}
-
 const checkForKeywords = (text: string): { match: boolean; type: 'high_intent' | 'urgent'; words: string[] } => {
   let foundWords: string[] = []
-  
+
   const highIntentMatches = KEYWORDS.HIGH_INTENT.filter(word => text.includes(word))
   if (highIntentMatches.length > 0) {
     foundWords = foundWords.concat(highIntentMatches)
@@ -695,12 +690,14 @@ const handleSend = async () => {
       chatStore.setLoading(false) // 无论成功失败，都重置加载状态
     }
   }
-  
+
 }
 
 const submitContactForm = async () => {
-  if (!contactForm.value.phone) return
-  
+  const err = validatePhone(contactForm.value.phone)
+  phoneError.value = err
+  if (err || !contactForm.value.phone) return
+
   try {
     await sendAlertToTeacher({
       contact: contactForm.value.phone,
@@ -709,8 +706,6 @@ const submitContactForm = async () => {
       messageSnippet: '用户触发了高意向关键词',
       studentName: chatStore.currentUserId,
     })
-    chatStore.markContactCompleted()
-    showContactModal.value = false
     contactForm.value.phone = ''
   } catch (error) {
     alert('提交失败，请稍后重试')
@@ -1117,8 +1112,17 @@ watch(
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.5); }
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.4;
+    transform: scale(1.5);
+  }
 }
 
 /* ========================================
@@ -1148,6 +1152,7 @@ watch(
     opacity: 0;
     transform: translateY(12px) scale(0.97);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -1396,14 +1401,23 @@ watch(
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
+.dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
 
 @keyframes bounce {
-  0%, 80%, 100% {
+
+  0%,
+  80%,
+  100% {
     transform: scale(0.5);
     opacity: 0.25;
   }
+
   40% {
     transform: scale(1);
     opacity: 1;
@@ -1536,8 +1550,15 @@ textarea::placeholder {
 }
 
 @keyframes record-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2); }
-  50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+  }
 }
 
 /* 输入提示 */
@@ -1578,8 +1599,13 @@ textarea::placeholder {
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-box {
@@ -1596,8 +1622,15 @@ textarea::placeholder {
 }
 
 @keyframes modal-in {
-  from { opacity: 0; transform: translateY(24px) scale(0.95); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-title {
@@ -1674,7 +1707,7 @@ textarea::placeholder {
 }
 
 .modal-cancel-btn:hover {
-background: var(--color-bg);
+  background: var(--color-bg);
   border-color: var(--color-text-muted);
 }
 
@@ -1767,6 +1800,27 @@ background: var(--color-bg);
 
 .modal-input-group {
   margin-bottom: 20px;
+}
+
+.input-error-border {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px #ef4444 !important;
+}
+
+.phone-error-text {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.chat-container.dark-theme .input-error-border {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 0 1px #f87171 !important;
+}
+
+.chat-container.dark-theme .phone-error-text {
+  color: #f87171;
 }
 
 .quick-contact-banner {
