@@ -3,7 +3,7 @@
     <!-- 左侧边栏 -->
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-icon">AI</div>
+        <img class="brand-icon" src="/asset/avatar/AI.jpg" alt="AI" />
         <span class="brand-name">BNBU 助手</span>
       </div>
 
@@ -62,7 +62,7 @@
       <!-- 顶部标题栏 -->
       <div class="chat-header">
         <div class="header-title">
-          <div class="header-avatar">AI</div>
+          <img class="header-avatar" src="/asset/avatar/AI.jpg" alt="AI" />
           <div>
             <div class="header-name">BNBU 助手</div>
             <div class="header-status">
@@ -76,7 +76,8 @@
       <!-- 消息列表 -->
       <div class="message-list" ref="messageListRef">
         <div v-for="message in chatStore.messages" :key="message.id" :class="['message-row', message.role]">
-          <div v-if="message.role === 'assistant'" class="avatar assistant-avatar">AI</div>
+          <img v-if="message.role === 'assistant'" class="avatar assistant-avatar" src="/asset/avatar/AI.jpg"
+            alt="AI" />
           <div class="bubble-wrapper">
             <div class="thinking-indicator"
               v-if="message.role === 'assistant' && isCurrentStreamingAssistantMessage(message) && !message.content">
@@ -91,7 +92,7 @@
 
         <!-- 非流式等待动画 -->
         <div v-if="chatStore.isLoading && !chatStore.isStreaming" class="message-row assistant">
-          <div class="avatar assistant-avatar">AI</div>
+          <img class="avatar assistant-avatar" src="/asset/avatar/AI.jpg" alt="AI" />
           <div class="bubble-wrapper">
             <div class="thinking-indicator">思考中</div>
             <div class="message-bubble loading-bubble">
@@ -835,15 +836,8 @@ watch(
 .brand-icon {
   width: 34px;
   height: 34px;
-  background: var(--color-primary-gradient);
   border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+  object-fit: cover;
   box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
 }
 
@@ -1076,14 +1070,8 @@ watch(
 .header-avatar {
   width: 36px;
   height: 36px;
-  background: var(--color-primary-gradient);
   border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
+  object-fit: cover;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
 }
 
@@ -1181,8 +1169,7 @@ watch(
 }
 
 .assistant-avatar {
-  background: var(--color-primary-gradient);
-  color: #fff;
+  object-fit: cover;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
 }
 
