@@ -454,7 +454,7 @@ const sendAudioToWhisper = async (audioBlob: Blob): Promise<string> => {
   }, TIMEOUT_MS)
 
   try {
-    const WHISPER_URL = 'http://100.65.151.85:8000/transcribe'
+    const WHISPER_URL = 'http://localhost:7860/transcribe'
     console.log('Whisper URL:', WHISPER_URL)
     const response = await fetch(WHISPER_URL, {
       method: 'POST',

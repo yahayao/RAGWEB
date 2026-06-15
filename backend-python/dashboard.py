@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -18,7 +19,8 @@ from sqlalchemy import func
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from database import ChatUser, ChatSession, SessionLocal
+from database import ChatUser, ChatSession, SessionLocal, extract_client_ip, lookup_region
+from email_sender import send_alert_email
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +134,11 @@ async def receive_alert(request: Request) -> JSONResponse:
 
     alert_time = datetime.now().strftime("%H:%M:%S")
 
-    # 推送到所有大屏客户端
+    # 提取客户端 IP 并查询归属地
+    client_ip = extract_client_ip(request)
+    resolved_ip, region = lookup_region(client_ip)
+
+    # 推送到所有大屏客户端（保持现有逻辑不变）
     await manager.broadcast(
         {
             "type": "alert",
@@ -147,11 +153,26 @@ async def receive_alert(request: Request) -> JSONResponse:
         }
     )
 
+    # 异步发送告警邮件（不阻塞响应）
+    email_data = {
+        "contact": contact,
+        "student_name": student_name,
+        "client_ip": resolved_ip,
+        "region": region,
+        "intent_type": intent_type,
+        "message_snippet": message_snippet,
+        "session_id": session_id,
+        "alert_time": alert_time,
+    }
+    asyncio.create_task(send_alert_email(email_data))
+
     logger.info(
-        "收到人工介入告警: contact=%s, type=%s, student=%s",
+        "收到人工介入告警: contact=%s, type=%s, student=%s, ip=%s, region=%s",
         contact,
         intent_type,
         student_name,
+        resolved_ip,
+        region,
     )
 
     return JSONResponse(
