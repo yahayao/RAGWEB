@@ -450,8 +450,8 @@
 
       /**
        * 从 ip2region / IP2Location 原始字符串提取省份中文名
-       * ip2region 格式:   "中国|华东|浙江省|杭州市|电信"  → 省份在索引 [2]
-       * IP2Location 格式: "China | Guangdong | Shenzhen" → 省份在索引 [1]，需英→中
+       * ip2region v4 格式: "中国|广东省|珠海市|移动|CN" → 省份在索引 [1]
+       * IP2Location 格式:   "China | Guangdong | Shenzhen" → 省份在索引 [1]，需英→中
        */
       function extractProvince(region) {
         if (!region) return ''
@@ -470,9 +470,9 @@
           return raw
         }
 
-        // ip2region 中文格式: "|" 分隔，5 字段
+        // ip2region 中文格式: "|" 分隔，省份在索引 [1]
         var parts = region.split('|')
-        if (parts.length >= 3) return (parts[2] || '').trim()
+        if (parts.length >= 3) return (parts[1] || '').trim()
         if (parts.length === 2) return (parts[1] || '').trim()
         return region.trim()
       }
