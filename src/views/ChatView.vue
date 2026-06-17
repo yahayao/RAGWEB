@@ -4,7 +4,7 @@
     <aside class="sidebar">
       <div class="sidebar-brand">
         <img class="brand-icon" src="/asset/avatar/AI.jpg" alt="AI" />
-        <span class="brand-name">BNBU 助手</span>
+        <span class="brand-name">BNBU招生问答助手</span>
       </div>
 
       <button class="new-session-btn" @click="chatStore.createNewSession()">
@@ -64,7 +64,7 @@
         <div class="header-title">
           <img class="header-avatar" src="/asset/avatar/AI.jpg" alt="AI" />
           <div>
-            <div class="header-name">BNBU 助手</div>
+            <div class="header-name">BNBU招生问答助手</div>
             <div class="header-status">
               <span class="status-dot"></span>
               在线
