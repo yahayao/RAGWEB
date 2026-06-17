@@ -17,7 +17,7 @@ from typing import Any
 import jieba
 from sqlalchemy import func
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from database import ChatUser, ChatSession, SessionLocal, extract_client_ip, lookup_region
 from email_sender import send_alert_email
@@ -64,12 +64,22 @@ manager = ConnectionManager()
 DASHBOARD_HTML_PATH = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
 
 
+GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "static", "china.json")
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page() -> HTMLResponse:
-    """返回数据大屏 HTML 页面"""
+    """返回数据大屏 HTML 页面，内联中国地图 GeoJSON 数据（无需外部请求）"""
     if os.path.exists(DASHBOARD_HTML_PATH):
         with open(DASHBOARD_HTML_PATH, "r", encoding="utf-8") as f:
             content = f.read()
+        # 读取中国地图 GeoJSON 并内联到 HTML 中
+        geojson_script = ""
+        if os.path.exists(GEOJSON_PATH):
+            with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
+                geojson_data = f.read()
+            geojson_script = f"<script>window.__CHINA_GEOJSON__ = {geojson_data};</script>"
+        content = content.replace("<!-- GEOJSON_PLACEHOLDER -->", geojson_script)
     else:
         content = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>数据大屏</title></head>
@@ -79,13 +89,6 @@ async def dashboard_page() -> HTMLResponse:
 
 
 # ==================== WebSocket 端点 ====================
-
-
-@router.get("/static/china.json")
-async def china_geojson() -> FileResponse:
-    """提供中国地图 GeoJSON 文件（本地加载，不依赖阿里云 DataV）"""
-    path = os.path.join(os.path.dirname(__file__), "static", "china.json")
-    return FileResponse(path, media_type="application/json")
 
 
 @router.websocket("/ws/dashboard")

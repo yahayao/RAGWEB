@@ -6,6 +6,7 @@
     <title>RAGWEB 数据大屏</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <!-- GEOJSON_PLACEHOLDER -->
     <style>
       * {
         margin: 0;
@@ -544,16 +545,10 @@
 
       // ==================== 加载中国地图 GeoJSON ====================
       async function loadChinaGeoJSON() {
-        // 从本地加载中国地图 GeoJSON（无需访问阿里云 DataV）
-        try {
-          const resp = await fetch(API_BASE + '/static/china.json')
-          if (resp.ok) {
-            const json = await resp.json()
-            echarts.registerMap('china', json)
-            return true
-          }
-        } catch (e) {
-          console.error('加载本地地图数据失败:', e)
+        // 直接使用内联的中国地图 GeoJSON（Python 后端在返回页面时注入）
+        if (window.__CHINA_GEOJSON__) {
+          echarts.registerMap('china', window.__CHINA_GEOJSON__)
+          return true
         }
         return false
       }
