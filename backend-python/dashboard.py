@@ -17,7 +17,7 @@ from typing import Any
 import jieba
 from sqlalchemy import func
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from database import ChatUser, ChatSession, SessionLocal, extract_client_ip, lookup_region
 from email_sender import send_alert_email
@@ -79,6 +79,13 @@ async def dashboard_page() -> HTMLResponse:
 
 
 # ==================== WebSocket 端点 ====================
+
+
+@router.get("/static/china.json")
+async def china_geojson() -> FileResponse:
+    """提供中国地图 GeoJSON 文件（本地加载，不依赖阿里云 DataV）"""
+    path = os.path.join(os.path.dirname(__file__), "static", "china.json")
+    return FileResponse(path, media_type="application/json")
 
 
 @router.websocket("/ws/dashboard")

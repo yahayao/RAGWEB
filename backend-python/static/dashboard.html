@@ -544,23 +544,16 @@
 
       // ==================== 加载中国地图 GeoJSON ====================
       async function loadChinaGeoJSON() {
-        // 使用 DataV 提供的中国地图 GeoJSON（含省份）
-        const urls = [
-          'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
-          'https://geo.datav.aliyun.com/areas_v3/bound/100000.json',
-        ]
-
-        for (const url of urls) {
-          try {
-            const resp = await fetch(url)
-            if (resp.ok) {
-              const json = await resp.json()
-              echarts.registerMap('china', json)
-              return true
-            }
-          } catch (e) {
-            // try next
+        // 从本地加载中国地图 GeoJSON（无需访问阿里云 DataV）
+        try {
+          const resp = await fetch(API_BASE + '/static/china.json')
+          if (resp.ok) {
+            const json = await resp.json()
+            echarts.registerMap('china', json)
+            return true
           }
+        } catch (e) {
+          console.error('加载本地地图数据失败:', e)
         }
         return false
       }

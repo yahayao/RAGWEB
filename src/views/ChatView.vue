@@ -314,9 +314,13 @@ const contextOverflowMessage = '输入内容过长，已超过模型上下文长
 
 const getUserIp = async () => {
   try {
-    const response = await fetch('https://api.ipify.org?format=json')
+    const response = await fetch('/api/ip/lookup')
     const data = await response.json()
-    userIp.value = data.ip
+    if (data.code === 200 && data.data) {
+      userIp.value = data.data.ip
+    } else {
+      userIp.value = '未知 IP'
+    }
   } catch (error) {
     console.error('获取用户 IP 失败:', error)
     userIp.value = '未知 IP'
