@@ -85,7 +85,7 @@
         </div>
 
         <!-- 非流式等待动画 -->
-        <div v-if="chatStore.isLoading && !chatStore.isStreaming" class="message-row assistant">
+        <div v-if="chatStore.isCurrentSessionLoading && !chatStore.isStreaming" class="message-row assistant">
           <img class="avatar assistant-avatar" src="/asset/avatar/AI.jpg" alt="AI" />
           <div class="bubble-wrapper">
             <div class="thinking-indicator">思考中</div>
@@ -123,7 +123,7 @@
               <rect x="6" y="6" width="12" height="12" fill="currentColor" />
             </svg>
           </button>
-          <button class="send-btn" @click="handleSend" :disabled="!inputText.trim() || chatStore.isLoading"
+          <button class="send-btn" @click="handleSend" :disabled="!inputText.trim() || chatStore.isCurrentSessionLoading"
             title="发送 (Enter)">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -502,7 +502,7 @@ const isThinkingInProgress = (content: string) => {
 }
 
 const isCurrentStreamingAssistantMessage = (message: Message) => {
-  if (!chatStore.isLoading || !chatStore.isStreaming) return false
+  if (!chatStore.isCurrentSessionLoading || !chatStore.isStreaming) return false
   if (message.role !== 'assistant') return false
 
   const lastMessage = chatStore.messages[chatStore.messages.length - 1]
@@ -526,13 +526,18 @@ const scrollToBottom = async () => {
 }
 
 const handleSend = async () => {
-  // 1. 先检查输入和加载状态，若不满足直接返回
-  if (!inputText.value.trim() || chatStore.isLoading) return
+  // 1. 先检查输入和加载状态（仅检查当前会话），若不满足直接返回
+  if (!inputText.value.trim() || chatStore.isCurrentSessionLoading) return
+
+  // 记录发送时的会话上下文，回调中直接操作目标 session 数组
+  const sessionIdAtSend = chatStore.currentSessionId
+  const sessionAtSend = chatStore.sessions.find(s => s.id === sessionIdAtSend)
+  const sessionMessagesAtSend: Message[] = sessionAtSend?.messages ?? []
 
   showContextLimitTip.value = false
 
-  // 2. 立即设置加载状态，锁定后续调用（核心修复）
-  chatStore.setLoading(true)
+  // 2. 立即设置当前会话的加载状态
+  chatStore.setSessionLoading(sessionIdAtSend, true)
 
   // 3. 构建并添加用户消息
   const userMessage: Message = {
@@ -590,16 +595,23 @@ const handleSend = async () => {
       requestData,
       (chunk: string) => {
         streamedContent += chunk
-        chatStore.updateMessageContent(msgId, streamedContent)
+        // 直接写目标 session 的 messages 数组，不受视图切换影响
+        const target = sessionMessagesAtSend.find(m => m.id === msgId)
+        if (target) target.content = streamedContent
+        // 如果当前仍在查看该会话，同步更新视图（保持与 switchSession 后的引用一致）
+        if (chatStore.currentSessionId === sessionIdAtSend) {
+          const viewMsg = chatStore.messages.find(m => m.id === msgId)
+          if (viewMsg) viewMsg.content = streamedContent
+        }
         scrollToBottom()
       },
       () => {
-        // ===== 修改：只有流式完成才保存用户和AI消息到数据库 =====
+        // 使用发送时的 sessionId，而非回调执行时的 currentSessionId
         (async () => {
           try {
             const chatRecord: ChatRecord = {
               user_id: chatStore.currentUserId,
-              session_id: chatStore.currentSessionId,
+              session_id: sessionIdAtSend,
               question: userMessage.content,
               answer: streamedContent,
             }
@@ -612,7 +624,7 @@ const handleSend = async () => {
 
         checkAndShowAlert();
         showContextLimitTip.value = false
-        chatStore.setLoading(false) // 流式结束后重置加载状态
+        chatStore.setSessionLoading(sessionIdAtSend, false)
         scrollToBottom()
       },
       (error: Error) => {
@@ -622,7 +634,7 @@ const handleSend = async () => {
         if (!streamedContent) {
           if (isContextOverflow) {
             chatStore.removeMessage(msgId)
-            chatStore.setLoading(false)
+            chatStore.setSessionLoading(sessionIdAtSend, false)
             scrollToBottom()
             return
           }
@@ -635,7 +647,7 @@ const handleSend = async () => {
               : '抱歉，发送失败了，请稍后再试。'
           )
         }
-        chatStore.setLoading(false) // 错误时重置加载状态
+        chatStore.setSessionLoading(sessionIdAtSend, false)
         scrollToBottom()
       }
     )
@@ -659,7 +671,7 @@ const handleSend = async () => {
       try {
         const chatRecord: ChatRecord = {
           user_id: chatStore.currentUserId,
-          session_id: chatStore.currentSessionId,
+          session_id: sessionIdAtSend,
           question: userMessage.content,
           answer: assistantMessage.content,
         }
@@ -687,7 +699,7 @@ const handleSend = async () => {
       }
       scrollToBottom()
     } finally {
-      chatStore.setLoading(false) // 无论成功失败，都重置加载状态
+      chatStore.setSessionLoading(sessionIdAtSend, false)
     }
   }
 

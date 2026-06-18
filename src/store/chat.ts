@@ -8,6 +8,7 @@ export const useChatStore = defineStore('chat', {
   state: () => ({
     messages: [] as Message[],
     isLoading: false,
+    loadingSessions: {} as Record<string, boolean>,
     isDarkTheme: false,
     isDeepThinking: false,
     isShowThinking: false,
@@ -25,6 +26,11 @@ export const useChatStore = defineStore('chat', {
 
     contactModalState: 'idle',
   }),
+  getters: {
+    isCurrentSessionLoading: (state) => {
+      return !!state.loadingSessions[state.currentSessionId]
+    },
+  },
   actions: {
     setUserId(userId: string) {
       this.currentUserId = userId
@@ -52,6 +58,15 @@ export const useChatStore = defineStore('chat', {
     },
     setLoading(loading: boolean) {
       this.isLoading = loading
+    },
+    setSessionLoading(sessionId: string, loading: boolean) {
+      if (loading) {
+        this.loadingSessions[sessionId] = true
+        this.isLoading = true
+      } else {
+        delete this.loadingSessions[sessionId]
+        this.isLoading = Object.keys(this.loadingSessions).length > 0
+      }
     },
     async clearMessages() {
       this.messages = []
