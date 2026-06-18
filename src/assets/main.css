@@ -95,7 +95,7 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background 1.5s var(--ease-in-out);
+  transition: background 1s linear;
 }
 
 #app {

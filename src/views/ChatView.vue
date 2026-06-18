@@ -803,7 +803,7 @@ watch(
   line-height: 1.6;
   color: var(--color-text-primary);
   background: var(--color-bg-gradient);
-  transition: background 1.5s var(--ease-in-out);
+  transition: background 1s linear;
 }
 
 /* ---- 深色模式 —— 覆盖颜色变量 ---- */
