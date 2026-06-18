@@ -11,7 +11,6 @@ import json
 import logging
 import os
 from collections import Counter
-from datetime import datetime, timedelta
 from typing import Any
 
 import jieba
@@ -21,6 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from database import ChatUser, ChatSession, SessionLocal, extract_client_ip, lookup_region
 from email_sender import send_alert_email
+from time_util import cst_today_str, cst_days_ago_str, cst_time_str
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ async def receive_alert(request: Request) -> JSONResponse:
             content={"code": 400, "message": "缺少联系方式 (contact/phone)"},
         )
 
-    alert_time = datetime.now().strftime("%H:%M:%S")
+    alert_time = cst_time_str()
 
     # 提取客户端 IP 并查询归属地
     client_ip = extract_client_ip(request)
@@ -247,7 +247,7 @@ def keywords(
     """获取用户消息关键词词频（用于词云图）"""
     db = SessionLocal()
     try:
-        start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        start_date = cst_days_ago_str(days - 1)
 
         rows = (
             db.query(ChatSession.question)
@@ -315,7 +315,7 @@ def dashboard_overview(request: Request) -> JSONResponse:
     """数据大屏概览：总用户数、总消息数、今日消息数"""
     db = SessionLocal()
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = cst_today_str()
 
         total_users = db.query(func.count(ChatUser.id)).scalar() or 0
         total_messages = db.query(func.count(ChatSession.id)).scalar() or 0

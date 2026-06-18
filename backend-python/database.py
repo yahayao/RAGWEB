@@ -8,8 +8,10 @@ from datetime import datetime
 from ipaddress import ip_address
 from typing import Any, cast
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, create_engine, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, create_engine, event, text
 from sqlalchemy.orm import Mapped, Session, declarative_base, mapped_column, relationship, sessionmaker
+
+from time_util import to_str_time as _to_str_time
 
 try:
     import ip2region.searcher as ip2xdb  # type: ignore[import-not-found]
@@ -86,6 +88,14 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
 
+
+@event.listens_for(engine, "connect")
+def _set_timezone(dbapi_connection, _connection_record):
+    """每个新数据库连接建立时设置会话时区为东八区"""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("SET TIME ZONE 'Asia/Shanghai'")
+    cursor.close()
+
 # ==================== 全局检索实例 ====================
 
 _searcher = None          # ip2region xdb 检索器
@@ -153,12 +163,6 @@ def ensure_schema() -> None:
 def json_resp(status: int, data: dict[str, Any]) -> dict[str, Any]:
     """返回字典格式的 JSON 响应体（配合 FastAPI 响应使用）"""
     return {"code": status, **data} if "code" not in data else data
-
-
-def _to_str_time(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    return str(value)
 
 
 async def _safe_json_body(request: Any) -> dict[str, Any]:

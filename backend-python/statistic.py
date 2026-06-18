@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -11,6 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, text
 
 from database import ChatSession, ChatUser, SessionLocal, _to_str_time
+from time_util import cst_today_str, cst_days_ago_str
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def overview(request: Request):
     """数据大屏概览：总用户数、总会话轮次、今日会话数、今日新增用户"""
     db = SessionLocal()
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = cst_today_str()
 
         total_users = db.query(func.count(ChatUser.id)).scalar() or 0
         total_sessions = db.query(func.count(ChatSession.id)).scalar() or 0
@@ -78,7 +78,7 @@ def trends(
     """每日会话量趋势"""
     db = SessionLocal()
     try:
-        start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        start_date = cst_days_ago_str(days - 1)
 
         rows = (
             db.query(
@@ -115,7 +115,7 @@ def top_users(
     """活跃用户排行（按对话轮次降序）"""
     db = SessionLocal()
     try:
-        start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        start_date = cst_days_ago_str(days - 1)
 
         rows = (
             db.query(
@@ -192,7 +192,7 @@ def content_stats(
     """内容统计：平均问答长度、总字数等"""
     db = SessionLocal()
     try:
-        start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        start_date = cst_days_ago_str(days - 1)
 
         stats = (
             db.query(
@@ -240,7 +240,7 @@ def hourly_activity(
     """按小时统计活跃度（0-23 时）"""
     db = SessionLocal()
     try:
-        start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        start_date = cst_days_ago_str(days - 1)
 
         rows = (
             db.query(
