@@ -91,11 +91,11 @@ body {
   font-size: 15px;
   line-height: 1.6;
   color: var(--color-text-primary);
-  background: var(--color-bg-gradient);
+  background: var(--bg-gradient-dynamic, var(--bg-gradient-morning));
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background 0.8s var(--ease-in-out);
+  transition: background 1.5s var(--ease-in-out);
 }
 
 #app {
@@ -131,19 +131,19 @@ body {
    时间主题 — 根据早晚自动切换背景渐变
    ======================================== */
 
-/* 白天主题 (6:00–18:00)：清新明亮 */
+/* 白天主题 (6:00–18:00)：使用 JS 生成的动态浅色渐变 */
 [data-time-theme="morning"] {
   --color-bg: #f8fafc;
-  --color-bg-gradient: var(--bg-gradient-morning);
+  --color-bg-gradient: var(--bg-gradient-dynamic, var(--bg-gradient-morning));
 }
 
-/* 傍晚主题 (18:00–6:00)：暖调黄昏 */
+/* 傍晚主题 (18:00–6:00)：使用 JS 生成的动态浅色渐变 */
 [data-time-theme="evening"] {
   --color-bg: #fffbeb;
-  --color-bg-gradient: var(--bg-gradient-evening-light);
+  --color-bg-gradient: var(--bg-gradient-dynamic, var(--bg-gradient-evening-light));
 }
 
-/* 默认使用早晨渐变 */
+/* 默认使用早晨渐变（JS 未加载时的回退） */
 :root {
   --color-bg-gradient: var(--bg-gradient-morning);
 }
