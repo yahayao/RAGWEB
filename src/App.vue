@@ -18,8 +18,10 @@ const EVENING_START = 18
 let timeCheckTimer: ReturnType<typeof setInterval> | null = null
 
 const getTimeTheme = (): 'morning' | 'evening' => {
-  const hour = new Date().getHours()
-  return hour >= MORNING_START && hour < EVENING_START ? 'morning' : 'evening'
+  // 使用北京时间 (UTC+8)，避免用户客户端时区不一致
+  const hour = new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Shanghai' })
+  const beijingHour = parseInt(hour, 10)
+  return beijingHour >= MORNING_START && beijingHour < EVENING_START ? 'morning' : 'evening'
 }
 
 const applyTimeTheme = () => {
