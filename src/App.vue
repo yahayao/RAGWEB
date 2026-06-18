@@ -38,12 +38,17 @@ const KEY_STOPS: [number, StopColors][] = [
 
 let timer: ReturnType<typeof setInterval> | null = null
 
-/** 虚拟时间：将 24 小时压缩到 CYCLE_SECONDS 秒完成一个循环 */
-const CYCLE_SECONDS = 180 // 3 分钟完成一轮 dawn→noon→dusk→midnight→dawn
-
-const getVirtualHourFloat = (): number => {
-  const seconds = (Date.now() / 1000) % CYCLE_SECONDS
-  return (seconds / CYCLE_SECONDS) * 24
+/** 获取北京时间（含分钟），返回 0-24 的小时数 */
+const getBeijingHourFloat = (): number => {
+  const parts = new Date()
+    .toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+      timeZone: 'Asia/Shanghai',
+    })
+    .split(':')
+  return parseInt(parts[0]!, 10) + parseInt(parts[1]!, 10) / 60
 }
 
 /** hex → [r, g, b] */
@@ -76,7 +81,7 @@ const toGradient = (c: [string, string, string]): string =>
   `linear-gradient(135deg, #${c[0]} 0%, #${c[1]} 50%, #${c[2]} 100%)`
 
 const updateGradient = () => {
-  const h = getVirtualHourFloat()
+  const h = getBeijingHourFloat()
 
   // 找到当前小时所在的两个关键色站
   let prev = KEY_STOPS[0]!

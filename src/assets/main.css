@@ -92,10 +92,19 @@ body {
   line-height: 1.6;
   color: var(--color-text-primary);
   background: var(--bg-gradient-dynamic, var(--bg-gradient-morning));
+  background-size: 400% 400%;
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background 1s linear;
+  animation: gradientFlow 20s ease infinite;
+}
+
+@keyframes gradientFlow {
+  0%   { background-position: 0% 0%; }
+  25%  { background-position: 100% 0%; }
+  50%  { background-position: 100% 100%; }
+  75%  { background-position: 0% 100%; }
+  100% { background-position: 0% 0%; }
 }
 
 #app {

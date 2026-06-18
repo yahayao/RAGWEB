@@ -793,6 +793,15 @@ watch(
    深海侧边栏 + 柔和主区域 + 靛蓝点缀
    ============================================ */
 
+/* 背景流动动画 */
+@keyframes gradientFlow {
+  0%   { background-position: 0% 0%; }
+  25%  { background-position: 100% 0%; }
+  50%  { background-position: 100% 100%; }
+  75%  { background-position: 0% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
 /* ---- 布局容器 ---- */
 .chat-container {
   display: flex;
@@ -803,7 +812,8 @@ watch(
   line-height: 1.6;
   color: var(--color-text-primary);
   background: var(--color-bg-gradient);
-  transition: background 1s linear;
+  background-size: 400% 400%;
+  animation: gradientFlow 20s ease infinite;
 }
 
 /* ---- 深色模式 —— 覆盖颜色变量 ---- */
