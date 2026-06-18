@@ -24,16 +24,16 @@ interface StopColors {
 }
 
 const KEY_STOPS: [number, StopColors][] = [
-  // 🌅 06:00 黎明 — 清冷蓝紫调
-  [6,  { light: ['dbeafe', 'ede9fe', 'fce7f3'], dark: ['1a2744', '1e2244', '231e3e'] }],
-  // ☀️ 12:00 正午 — 明亮近白
-  [12, { light: ['f0f9ff', 'faf5ff', 'fff5f5'], dark: ['2d3a5c', '2a2e52', '302c4a'] }],
-  // 🌇 18:00 黄昏 — 暖金橘粉 sunset
-  [18, { light: ['fde68a', 'fbcfe8', 'c4b5fd'], dark: ['2d1e3e', '261a38', '1f1632'] }],
-  // 🌙 24:00 午夜 — 极深暗色
-  [24, { light: ['1a1333', '0c081a', '090618'], dark: ['0d0a1a', '060510', '050310'] }],
+  // 🌅 06:00 黎明 — 清冷蓝紫调  /  暗色：亮灰蓝→暗藏蓝→深蓝
+  [6,  { light: ['dbeafe', 'ede9fe', 'fce7f3'], dark: ['3b5998', '1a2744', '0c1422'] }],
+  // ☀️ 12:00 正午 — 明亮近白  /  暗色：亮灰蓝→暗灰蓝→深灰
+  [12, { light: ['f0f9ff', 'faf5ff', 'fff5f5'], dark: ['4a6080', '222d4a', '0f172a'] }],
+  // 🌇 18:00 黄昏 — 暖金橘粉  /  暗色：暖紫灰→暗紫→深黑紫
+  [18, { light: ['fde68a', 'fbcfe8', 'c4b5fd'], dark: ['5a3a5e', '1f1830', '0b0814'] }],
+  // 🌙 24:00 午夜 — 极深暗色  /  暗色：暗紫→深黑蓝→纯黑
+  [24, { light: ['1a1333', '0c081a', '090618'], dark: ['1e1840', '0a0818', '030208'] }],
   // 🔁 30:00 = 次日 06:00，循环闭合
-  [30, { light: ['dbeafe', 'ede9fe', 'fce7f3'], dark: ['1a2744', '1e2244', '231e3e'] }],
+  [30, { light: ['dbeafe', 'ede9fe', 'fce7f3'], dark: ['3b5998', '1a2744', '0c1422'] }],
 ]
 
 let timer: ReturnType<typeof setInterval> | null = null
