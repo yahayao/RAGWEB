@@ -807,10 +807,10 @@ watch(
 }
 
 /* ---- 深色模式 —— 覆盖颜色变量 ---- */
-/* 基础深色变量（夜晚默认） */
+/* 深色基础（夜晚默认，18:00–6:00 最深） */
 .chat-container.dark-theme {
   --color-bg: #0b1120;
-  --color-bg-gradient: var(--bg-gradient-evening);
+  --color-bg-gradient: var(--bg-gradient-dark-evening);
   --color-surface: #111827;
   --color-border: #1f2937;
   --color-border-light: #1a2236;
@@ -826,9 +826,14 @@ watch(
   --color-sidebar-border: rgba(255, 255, 255, 0.06);
 }
 
-/* 白天开深色模式：藏蓝 → 暗靛 → 深灰紫，偏亮 */
+/* 深色-白天 (6:00–18:00)：藏蓝 → 暗靛 → 深灰紫，偏亮 */
 [data-time-theme="morning"] .chat-container.dark-theme {
   --color-bg-gradient: var(--bg-gradient-dark-daytime);
+}
+
+/* 深色-夜晚 (18:00–6:00)：显式覆盖确保不变 */
+[data-time-theme="evening"] .chat-container.dark-theme {
+  --color-bg-gradient: var(--bg-gradient-dark-evening);
 }
 
 /* ========================================

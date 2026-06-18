@@ -9,11 +9,11 @@ import { onMounted, onBeforeUnmount } from 'vue'
 
 /**
  * 时间主题检测：根据当前小时自动切换背景渐变
- * - 早晨主题 (morning)：6:00–16:59，天蓝→淡紫→浅玫瑰渐变
- * - 夜晚主题 (evening)：17:00–5:59，深靛蓝→深海蓝→深蓝紫渐变
+ * - 白天主题 (morning)：6:00–17:59
+ * - 傍晚主题 (evening)：18:00–5:59
  */
 const MORNING_START = 6
-const EVENING_START = 17
+const EVENING_START = 18
 
 let timeCheckTimer: ReturnType<typeof setInterval> | null = null
 
