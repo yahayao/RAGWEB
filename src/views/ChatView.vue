@@ -28,6 +28,10 @@
       </div>
 
       <div class="sidebar-footer">
+        <div class="user-info-bar">
+          <div class="user-avatar-small">{{ chatStore.currentUserId.charAt(0).toUpperCase() }}</div>
+          <span class="user-name-text">{{ chatStore.currentUserId }}</span>
+        </div>
         <button class="theme-toggle-btn" @click="chatStore.toggleTheme()">
           <span class="theme-icon">
             <svg v-if="chatStore.isDarkTheme" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
@@ -951,6 +955,39 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* 用户信息栏（仅展示） */
+.user-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.user-avatar-small {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary-gradient);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-name-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-sidebar-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 主题切换按钮 */
