@@ -44,6 +44,8 @@
   /* ---- 时间主题背景渐变 ---- */
   /* 早晨 (6:00–17:00)：天蓝 → 淡紫 → 浅玫瑰，清新温暖 */
   --bg-gradient-morning: linear-gradient(135deg, #e0f2fe 0%, #f0e6ff 50%, #ffe4e6 100%);
+  /* 白天深色模式 (6:00–17:00 手动切深色)：藏蓝 → 暗靛 → 深灰紫，偏亮 */
+  --bg-gradient-dark-daytime: linear-gradient(135deg, #1a2744 0%, #1e2244 50%, #231e3e 100%);
   /* 夜晚 (17:00–6:00)：深靛蓝 → 深海蓝 → 深蓝紫，深邃优雅 */
   --bg-gradient-evening: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #0c1445 100%);
 

@@ -807,6 +807,7 @@ watch(
 }
 
 /* ---- 深色模式 —— 覆盖颜色变量 ---- */
+/* 基础深色变量（夜晚默认） */
 .chat-container.dark-theme {
   --color-bg: #0b1120;
   --color-bg-gradient: var(--bg-gradient-evening);
@@ -823,6 +824,11 @@ watch(
   --color-sidebar-hover: rgba(99, 102, 241, 0.08);
   --color-sidebar-active: rgba(99, 102, 241, 0.14);
   --color-sidebar-border: rgba(255, 255, 255, 0.06);
+}
+
+/* 白天开深色模式：藏蓝 → 暗靛 → 深灰紫，偏亮 */
+[data-time-theme="morning"] .chat-container.dark-theme {
+  --color-bg-gradient: var(--bg-gradient-dark-daytime);
 }
 
 /* ========================================
