@@ -28,16 +28,6 @@
       </div>
 
       <div class="sidebar-footer">
-        <!-- 用户信息 -->
-        <div class="user-info-bar" @click="openChangeUserModal" title="点击切换用户">
-          <div class="user-avatar-small">{{ chatStore.currentUserId.charAt(0).toUpperCase() }}</div>
-          <span class="user-name-text">{{ chatStore.currentUserId }}</span>
-          <svg viewBox="0 0 24 24" fill="none" width="12" height="12"
-            style="margin-left:auto;opacity:0.5;flex-shrink:0">
-            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </div>
         <button class="theme-toggle-btn" @click="chatStore.toggleTheme()">
           <span class="theme-icon">
             <svg v-if="chatStore.isDarkTheme" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
@@ -143,19 +133,16 @@
       </div>
     </main>
 
-    <!-- 用户设置弹窗 -->
+    <!-- 用户设置弹窗（仅首次使用） -->
     <div v-if="showUserModal" class="modal-overlay">
       <div class="modal-box">
-        <div class="modal-title">{{ isChangingUser ? '切换用户' : '欢迎使用 AI 助手' }}</div>
-        <p class="modal-desc">
-          {{ isChangingUser ? '输入用户名以切换到另一账户的对话记录' : '请输入您的用户名，用于保存和恢复对话记录' }}
-        </p>
-        <input class="modal-input" v-model="userIdInput" :placeholder="isChangingUser ? '输入用户名' : '输入用户名（如：张三）'"
+        <div class="modal-title">欢迎使用 AI 助手</div>
+        <p class="modal-desc">请输入您的用户名，用于保存和恢复对话记录</p>
+        <input class="modal-input" v-model="userIdInput" placeholder="输入用户名（如：张三）"
           @keydown.enter="confirmUserId" maxlength="30" />
         <div class="modal-actions">
-          <button v-if="isChangingUser" class="modal-cancel-btn" @click="showUserModal = false">取消</button>
           <button class="modal-confirm-btn" :disabled="!userIdInput.trim()" @click="confirmUserId">
-            {{ isChangingUser ? '确认切换' : '开始使用' }}
+            开始使用
           </button>
         </div>
       </div>
@@ -306,7 +293,6 @@ const renderMarkdown = (content: string): string => {
 const chatStore = useChatStore()
 const inputText = ref('')
 const showUserModal = ref(false)
-const isChangingUser = ref(false)
 const userIdInput = ref('')
 const userIp = ref('')
 const showContextLimitTip = ref(false)
@@ -327,10 +313,12 @@ const getUserIp = async () => {
   }
 }
 
-const openChangeUserModal = () => {
-  userIdInput.value = chatStore.currentUserId
-  isChangingUser.value = true
-  showUserModal.value = true
+const confirmUserId = async () => {
+  if (!userIdInput.value.trim()) return
+  chatStore.setUserId(userIdInput.value.trim())
+  showUserModal.value = false
+  userIdInput.value = ''
+  await initAfterLogin()
 }
 
 const initAfterLogin = async () => {
@@ -344,15 +332,6 @@ const initAfterLogin = async () => {
     })
   }
   scrollToBottom()
-}
-
-const confirmUserId = async () => {
-  if (!userIdInput.value.trim()) return
-  chatStore.setUserId(userIdInput.value.trim())
-  showUserModal.value = false
-  isChangingUser.value = false
-  userIdInput.value = ''
-  await initAfterLogin()
 }
 
 const isRecording = ref(false)
@@ -972,45 +951,6 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-/* 用户信息栏 */
-.user-info-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
-  overflow: hidden;
-}
-
-.user-info-bar:hover {
-  background: var(--color-sidebar-hover);
-}
-
-.user-avatar-small {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--color-primary-gradient);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.user-name-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-sidebar-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* 主题切换按钮 */

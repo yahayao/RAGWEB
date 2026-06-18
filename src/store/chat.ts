@@ -102,7 +102,6 @@ export const useChatStore = defineStore('chat', {
       this.contactModalState = 'contacted'
     },
     resetContactState() {
-      // 如果需要重置（例如切换用户时）
       this.contactModalState = 'idle'
     },
 
