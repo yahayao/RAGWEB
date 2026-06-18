@@ -29,8 +29,8 @@
 
       <div class="sidebar-footer">
         <div class="user-info-bar">
-          <div class="user-avatar-small">{{ chatStore.currentUserId.charAt(0).toUpperCase() }}</div>
-          <span class="user-name-text">{{ chatStore.currentUserId }}</span>
+          <div class="user-avatar-small">{{ (chatStore.currentDisplayName || chatStore.currentUserId).charAt(0).toUpperCase() }}</div>
+          <span class="user-name-text">{{ chatStore.currentDisplayName || chatStore.currentUserId }}</span>
         </div>
         <button class="theme-toggle-btn" @click="chatStore.toggleTheme()">
           <span class="theme-icon">
@@ -141,8 +141,8 @@
     <div v-if="showUserModal" class="modal-overlay">
       <div class="modal-box">
         <div class="modal-title">欢迎使用 AI 助手</div>
-        <p class="modal-desc">请输入您的用户名，用于保存和恢复对话记录</p>
-        <input class="modal-input" v-model="userIdInput" placeholder="输入用户名（如：张三）"
+        <p class="modal-desc">请输入您的称呼，用于保存和恢复对话记录</p>
+        <input class="modal-input" v-model="userIdInput" placeholder="输入您的称呼（如：张三）"
           @keydown.enter="confirmUserId" maxlength="30" />
         <div class="modal-actions">
           <button class="modal-confirm-btn" :disabled="!userIdInput.trim()" @click="confirmUserId">
@@ -183,7 +183,7 @@ import DOMPurify from 'dompurify'
 
 
 // ===== 新增代码（仅加这两行）=====
-import { saveChatRecord } from '../api/chat' // 导入保存数据库的接口
+import { saveChatRecord, registerUser } from '../api/chat' // 导入保存数据库的接口
 import type { ChatRecord } from '../types/chat' // 导入数据库记录类型
 import { sendAlertToTeacher } from '../api/chat'
 
@@ -318,8 +318,20 @@ const getUserIp = async () => {
 }
 
 const confirmUserId = async () => {
-  if (!userIdInput.value.trim()) return
-  chatStore.setUserId(userIdInput.value.trim())
+  const name = userIdInput.value.trim()
+  if (!name) return
+  try {
+    const { data } = await registerUser(name)
+    if (data.code === 200) {
+      chatStore.setUserInfo(String(data.data.id), data.data.username)
+    } else {
+      alert(data.message || '注册失败，请重试')
+      return
+    }
+  } catch {
+    alert('网络错误，请重试')
+    return
+  }
   showUserModal.value = false
   userIdInput.value = ''
   await initAfterLogin()
@@ -692,7 +704,7 @@ const submitContactForm = async () => {
       sessionId: chatStore.currentSessionId,
       intentType: chatStore.pendingAlertType || 'high_intent',
       messageSnippet: '用户触发了高意向关键词',
-      studentName: chatStore.currentUserId,
+      studentName: chatStore.currentDisplayName || chatStore.currentUserId,
     })
     contactForm.value.phone = ''
   } catch (error) {
@@ -717,6 +729,10 @@ const closeModal = () => {
 
 onMounted(async () => {
   if (!chatStore.currentUserId) {
+    showUserModal.value = true
+  } else if (!chatStore.currentDisplayName) {
+    // 旧版本用户：localStorage 有 chat_user_id 但没有 chat_display_name
+    // 需要重新注册
     showUserModal.value = true
   } else {
     await initAfterLogin()

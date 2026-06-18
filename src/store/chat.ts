@@ -15,6 +15,7 @@ export const useChatStore = defineStore('chat', {
     sessions: [] as Session[],
     currentSessionId: '',
     currentUserId: localStorage.getItem('chat_user_id') ?? '',
+    currentDisplayName: localStorage.getItem('chat_display_name') ?? '',
 
     showContactModal: false,
     pendingAlertType: null as 'high_intent' | 'urgent' | null, 
@@ -28,6 +29,12 @@ export const useChatStore = defineStore('chat', {
     setUserId(userId: string) {
       this.currentUserId = userId
       localStorage.setItem('chat_user_id', userId)
+    },
+    setUserInfo(uid: string, displayName: string) {
+      this.currentUserId = uid
+      this.currentDisplayName = displayName
+      localStorage.setItem('chat_user_id', uid)
+      localStorage.setItem('chat_display_name', displayName)
     },
     addMessage(message: Message) {
       this.messages.push(message)

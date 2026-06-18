@@ -199,6 +199,14 @@ export const saveChatRecord = async (data: ChatRecord) => {
 }
 
 /**
+ * 注册新用户：传入称呼，后端返回系统生成的 uid
+ * @param displayName 用户输入的称呼
+ */
+export const registerUser = async (displayName: string) => {
+  return chatDbApi.post('/register', { display_name: displayName })
+}
+
+/**
  * 获取指定会话的历史对话记录
  * @param session_id 会话ID
  * @param user_id 可选：用户ID（默认default_user）

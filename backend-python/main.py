@@ -73,7 +73,7 @@ def health_check():
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from typing import Any, cast
+from typing import Any
 
 
 async def _safe_json_body(request: Request) -> dict[str, Any]:
@@ -84,16 +84,34 @@ async def _safe_json_body(request: Request) -> dict[str, Any]:
         return {}
 
 
+@app.post("/api/chat/register")
+async def register_user(request: Request) -> JSONResponse:
+    """注册新用户：返回自增 id 作为用户标识，username 存展示名（可重复）"""
+    body = await _safe_json_body(request)
+    display_name = str(body.get("display_name") or "").strip()
+    if not display_name:
+        return JSONResponse(status_code=400, content={"code": 400, "message": "请输入称呼"})
+    db = database.SessionLocal()
+    try:
+        client_ip = database.extract_client_ip(request)
+        result = database.register_user(db, display_name, client_ip)
+        db.commit()
+        return JSONResponse(status_code=200, content={"code": 200, "message": "注册成功", "data": result})
+    except Exception as exc:
+        db.rollback()
+        logger.exception("用户注册失败")
+        return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
+    finally:
+        db.close()
+
+
 @app.get("/api/chat/records/{session_id:path}")
 def get_records(session_id: str, request: Request) -> JSONResponse:
     """获取指定会话的历史记录"""
-    username = (request.query_params.get("user_id") or "default_user").strip() or "default_user"
+    user_id = database.parse_user_id(request.query_params.get("user_id"))
     db = database.SessionLocal()
     try:
-        user = db.query(database.ChatUser.id).filter(database.ChatUser.username == username).first()
-        user_id = cast(int | None, user[0] if user else None)
-
-        if not user_id:
+        if not user_id or not database.user_exists(db, user_id):
             return JSONResponse(status_code=200, content={"code": 200, "message": "获取成功", "data": []})
 
         turns = (
@@ -133,13 +151,10 @@ def get_records(session_id: str, request: Request) -> JSONResponse:
 @app.delete("/api/chat/records/{session_id:path}")
 def delete_records(session_id: str, request: Request) -> JSONResponse:
     """删除指定会话的全部记录"""
-    username = (request.query_params.get("user_id") or "default_user").strip() or "default_user"
+    user_id = database.parse_user_id(request.query_params.get("user_id"))
     db = database.SessionLocal()
     try:
-        user = db.query(database.ChatUser.id).filter(database.ChatUser.username == username).first()
-        user_id = cast(int | None, user[0] if user else None)
-
-        if not user_id:
+        if not user_id or not database.user_exists(db, user_id):
             return JSONResponse(status_code=200, content={"code": 200, "message": "删除成功", "data": {"affectedRows": 0}})
 
         affected = (
@@ -164,7 +179,9 @@ def list_sessions(user_id: str, request: Request) -> JSONResponse:
     """获取用户的所有会话列表"""
     db = database.SessionLocal()
     try:
-        uid = database.ensure_user_id_by_username(db, user_id, database.extract_client_ip(request))
+        uid_int = database.parse_user_id(user_id)
+        if not uid_int or not database.user_exists(db, uid_int):
+            return JSONResponse(status_code=404, content={"code": 404, "message": "用户不存在"})
         rows = db.execute(
             text("""
                 SELECT cs.session_id,
@@ -180,7 +197,7 @@ def list_sessions(user_id: str, request: Request) -> JSONResponse:
                 GROUP BY cs.session_id, cs.user_id
                 ORDER BY last_time DESC
             """),
-            {"uid": uid},
+            {"uid": uid_int},
         ).mappings().all()
 
         data: list[dict[str, Any]] = []
@@ -204,18 +221,18 @@ def list_sessions(user_id: str, request: Request) -> JSONResponse:
 async def save_record(request: Request) -> JSONResponse:
     """保存一轮对话记录"""
     body = await _safe_json_body(request)
-    username = str(body.get("user_id") or "default_user")
+    user_id = database.parse_user_id(str(body.get("user_id") or ""))
     session_id = str(body.get("session_id") or "").strip()
     question = str(body.get("question") or "").strip()
     answer = str(body.get("answer") or "").strip()
 
-    if not session_id or not question or not answer:
-        return JSONResponse(status_code=400, content={"code": 400, "message": "缺少必要字段：session_id/question/answer"})
+    if not user_id or not session_id or not question or not answer:
+        return JSONResponse(status_code=400, content={"code": 400, "message": "缺少必要字段：user_id/session_id/question/answer"})
 
     db = database.SessionLocal()
     try:
-        client_ip = database.extract_client_ip(request)
-        user_id = database.ensure_user_id_by_username(db, username, client_ip)
+        if not database.user_exists(db, user_id):
+            return JSONResponse(status_code=400, content={"code": 400, "message": "用户不存在，请先注册"})
         turn = database.ChatSession(user_id=user_id, session_id=session_id, question=question, answer=answer)
         db.add(turn)
         db.flush()

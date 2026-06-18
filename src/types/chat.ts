@@ -66,7 +66,7 @@ export interface ChatSession {
 
 /** 与后端保存接口对齐：一轮对话记录（用户问题 + AI回复） */
 export interface ChatRecord {
-  user_id: string                   // 用户ID
+  user_id: string                   // 用户UID（系统生成的 UUID）
   session_id: string                // 会话/对话ID
   question: string                  // 用户问题
   answer: string                    // AI回复

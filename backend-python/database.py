@@ -106,12 +106,12 @@ _location_db = None       # IP2Location 实例
 
 
 class ChatUser(Base):
-    """用户主表：记录唯一用户名及最近一次 IP/归属地信息"""
+    """用户主表：id 自增主键作为唯一标识，username 存展示名（可重复）"""
 
     __tablename__ = "chat_users"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
     ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     region: Mapped[str | None] = mapped_column(String(255), nullable=True)
     create_time: Mapped[datetime] = mapped_column(
@@ -309,21 +309,28 @@ def _clean_location_value(value: Any) -> str:
     return text_value
 
 
-def ensure_user_id_by_username(db: Session, username_raw: str, client_ip: str) -> int:
-    """用户不存在则创建并记录 IP/归属地；存在则返回已有 ID"""
-    username = (username_raw or "").strip() or "default_user"
+def register_user(db: Session, display_name_raw: str, client_ip: str) -> dict:
+    """注册新用户：自增 id 作为唯一标识，username 存展示名（可重复）"""
+    username = (display_name_raw or "").strip()[:64] or "匿名用户"
     ip_val, region = lookup_region(client_ip)
+    user = ChatUser(username=username, ip=ip_val, region=region)
+    db.add(user)
+    db.flush()
+    return {"id": int(user.id), "username": user.username}
 
-    user = db.query(ChatUser).filter(ChatUser.username == username).first()
-    if user is None:
-        user = ChatUser(username=username, ip=ip_val, region=region)
-        db.add(user)
-        db.flush()
 
-    user_id = int(user.id or 0)
-    if user_id <= 0:
-        raise RuntimeError("用户创建或查询失败")
-    return user_id
+def parse_user_id(raw: str | None) -> int | None:
+    """将请求参数转为数字用户 ID，无效则返回 None"""
+    try:
+        uid = int(str(raw or "").strip())
+        return uid if uid > 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def user_exists(db: Session, user_id: int) -> bool:
+    """检查用户是否存在"""
+    return db.query(ChatUser.id).filter(ChatUser.id == user_id).first() is not None
 
 
 # ==================== 初始化 / 销毁 ====================
