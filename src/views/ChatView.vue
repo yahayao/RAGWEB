@@ -140,7 +140,7 @@
     <!-- 用户设置弹窗（仅首次使用） -->
     <div v-if="showUserModal" class="modal-overlay">
       <div class="modal-box">
-        <div class="modal-title">欢迎使用 AI 助手</div>
+        <div class="modal-title">欢迎使用BNBU招生问答助手</div>
         <p class="modal-desc">请输入您的称呼，用于保存和恢复对话记录</p>
         <input class="modal-input" v-model="userIdInput" placeholder="输入您的称呼（如：张三）"
           @keydown.enter="confirmUserId" maxlength="30" />
@@ -802,13 +802,14 @@ watch(
   font-size: 15px;
   line-height: 1.6;
   color: var(--color-text-primary);
-  background: var(--color-bg);
-  transition: background var(--duration-normal) var(--ease-out);
+  background: var(--color-bg-gradient);
+  transition: background 0.8s var(--ease-in-out);
 }
 
 /* ---- 深色模式 —— 覆盖颜色变量 ---- */
 .chat-container.dark-theme {
   --color-bg: #0b1120;
+  --color-bg-gradient: var(--bg-gradient-evening);
   --color-surface: #111827;
   --color-border: #1f2937;
   --color-border-light: #1a2236;
@@ -816,27 +817,98 @@ watch(
   --color-text-secondary: #94a3b8;
   --color-text-muted: #64748b;
   --color-primary-light: rgba(99, 102, 241, 0.1);
-  --color-sidebar-bg: #030712;
+  --color-sidebar-bg: rgba(23, 28, 45, 0.78);
   --color-sidebar-text: #cbd5e1;
   --color-sidebar-text-muted: #4b5563;
   --color-sidebar-hover: rgba(99, 102, 241, 0.08);
   --color-sidebar-active: rgba(99, 102, 241, 0.14);
-  --color-sidebar-border: #111827;
+  --color-sidebar-border: rgba(255, 255, 255, 0.06);
 }
 
 /* ========================================
-   左侧边栏
+   左侧边栏 — 浅色模式
+   ======================================== */
+.chat-container:not(.dark-theme) .sidebar {
+  background: rgba(237, 243, 252, 0.68);
+  border-right-color: rgba(193, 207, 232, 0.45);
+}
+
+.chat-container:not(.dark-theme) .sidebar-brand {
+  border-bottom-color: #e2e8f0;
+}
+
+.chat-container:not(.dark-theme) .brand-name {
+  color: #1e293b;
+}
+
+.chat-container:not(.dark-theme) .new-session-btn {
+  background: rgba(99, 102, 241, 0.08);
+  color: #4f46e5;
+  border-color: rgba(99, 102, 241, 0.15);
+}
+
+.chat-container:not(.dark-theme) .new-session-btn:hover {
+  background: rgba(99, 102, 241, 0.16);
+  color: #4338ca;
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+}
+
+.chat-container:not(.dark-theme) .session-section-title {
+  color: #94a3b8;
+}
+
+.chat-container:not(.dark-theme) .session-item {
+  color: #475569;
+}
+
+.chat-container:not(.dark-theme) .session-item:hover {
+  background: rgba(99, 102, 241, 0.06);
+  color: #334155;
+}
+
+.chat-container:not(.dark-theme) .session-item.active {
+  background: rgba(99, 102, 241, 0.1);
+  color: #4338ca;
+}
+
+.chat-container:not(.dark-theme) .session-icon {
+  opacity: 0.4;
+}
+
+.chat-container:not(.dark-theme) .session-item.active .session-icon {
+  opacity: 0.8;
+}
+
+.chat-container:not(.dark-theme) .sidebar-footer {
+  border-top-color: #e2e8f0;
+}
+
+.chat-container:not(.dark-theme) .user-info-bar:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.chat-container:not(.dark-theme) .user-name-text {
+  color: #475569;
+}
+
+/* ========================================
+   左侧边栏（深色基础）
    ======================================== */
 .sidebar {
   width: 272px;
   min-width: 272px;
   background: var(--color-sidebar-bg);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
   display: flex;
   flex-direction: column;
   padding: 20px 12px;
   gap: 4px;
   user-select: none;
   border-right: 1px solid var(--color-sidebar-border);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.06), 1px 0 4px rgba(0, 0, 0, 0.04);
+  z-index: 5;
 }
 
 .sidebar-brand {
@@ -1024,26 +1096,48 @@ watch(
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--color-sidebar-text-muted);
+  padding: 9px 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-md);
+  color: #a5b4fc;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
 .theme-toggle-btn:hover {
-  background: var(--color-sidebar-hover);
-  color: var(--color-sidebar-text);
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* 浅色模式下主题按钮样式 */
+.chat-container:not(.dark-theme) .theme-toggle-btn {
+  background: rgba(99, 102, 241, 0.06);
+  color: #4f46e5;
   border-color: rgba(99, 102, 241, 0.2);
+}
+
+.chat-container:not(.dark-theme) .theme-toggle-btn:hover {
+  background: rgba(99, 102, 241, 0.14);
+  color: #4338ca;
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 2px 14px rgba(99, 102, 241, 0.18);
 }
 
 .theme-icon {
   display: flex;
   align-items: center;
-  opacity: 0.65;
+  opacity: 0.8;
+  flex-shrink: 0;
 }
 
 /* ========================================
@@ -1053,7 +1147,7 @@ watch(
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg);
+  background: transparent;
   overflow: hidden;
   min-width: 0;
 }
@@ -1062,12 +1156,13 @@ watch(
 .chat-header {
   padding: 12px 28px;
   border-bottom: 1px solid var(--color-border-light);
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
   display: flex;
   align-items: center;
   z-index: 10;
+  box-shadow: var(--shadow-md);
 }
 
 .header-title {
@@ -1250,16 +1345,16 @@ watch(
   background: var(--color-primary-gradient);
   color: #fff;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 16px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35), 0 1px 4px rgba(99, 102, 241, 0.2);
 }
 
-/* AI 气泡：柔和卡片 */
+/* AI 气泡：柔和卡片 + 细腻阴影 */
 .message-row.assistant .message-bubble {
   background: #fff;
   color: var(--color-text-primary);
   border-bottom-left-radius: 4px;
   border: 1px solid var(--color-border-light);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(0, 0, 0, 0.02);
 }
 
 /* ========================================
@@ -1425,7 +1520,9 @@ watch(
    ======================================== */
 .input-wrapper {
   padding: 16px 28px 20px;
-  background: linear-gradient(180deg, transparent 0%, var(--color-bg) 20%);
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.5) 25%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .input-box {
@@ -1437,7 +1534,7 @@ watch(
   border-radius: var(--radius-xl);
   padding: 6px 6px 6px 14px;
   transition: all var(--duration-fast) var(--ease-out);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .input-box:focus-within {
@@ -1610,7 +1707,7 @@ textarea::placeholder {
   padding: 32px 28px 24px;
   width: 400px;
   max-width: 92vw;
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-xl), 0 0 0 1px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1647,7 +1744,7 @@ textarea::placeholder {
   padding: 11px 14px;
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-bg);
+  background: #fff;
   color: var(--color-text-primary);
   font-size: 14px;
   font-family: var(--font-sans);
@@ -1711,12 +1808,22 @@ textarea::placeholder {
    深色模式 — 元素覆盖
    ======================================== */
 .chat-container.dark-theme .chat-header {
-  background: rgba(11, 17, 32, 0.8);
+  background: rgba(11, 17, 32, 0.82);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom-color: var(--color-border);
+  box-shadow: var(--shadow-md);
 }
 
 .chat-container.dark-theme .message-row.assistant .message-bubble {
   background: var(--color-surface);
   border-color: var(--color-border);
+}
+
+.chat-container.dark-theme .input-wrapper {
+  background: linear-gradient(180deg, transparent 0%, rgba(11, 17, 32, 0.6) 30%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .chat-container.dark-theme .input-box {
