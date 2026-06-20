@@ -342,7 +342,7 @@ const initAfterLogin = async () => {
   if (chatStore.messages.length === 0) {
     chatStore.addMessage({
       id: 'welcome',
-      content: '您好！我是 AI 助手，有什么我能帮您的吗？',
+      content: '您好！我是BNBU招生助手，有什么我能帮您的吗？',
       role: 'assistant',
       timestamp: Date.now(),
     })
