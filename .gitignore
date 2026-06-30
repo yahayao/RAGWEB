@@ -47,5 +47,8 @@ backend-python/ip2region/maker
 backend-python/ip2region/data/sample
 backend-python/ip2region/data/*.csv
 backend-python/ip2region/data/*.txt
+
+# agent
 .codewhale/
 .deepseek/
+CLAUDE.md
