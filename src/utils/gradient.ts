@@ -27,10 +27,10 @@ const KEY_STOPS: [number, StopColors][] = [
   [30, { light: ['dbeafe', 'ede9fe', 'fce7f3'], dark: ['3b5998', '1a2744', '0c1422'] }],
 ]
 
-/** 获取本地时间（含分钟），返回 0-24 的小时数 */
+/** 获取本地时间（含秒），返回 0-24 的小时数 */
 export const getLocalHourFloat = (): number => {
   const now = new Date()
-  return now.getHours() + now.getMinutes() / 60
+  return now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600
 }
 
 /** hex → [r, g, b] */
@@ -74,7 +74,12 @@ export interface GradientResult {
 
 /** 根据当前小时数计算渐变值 */
 export const computeGradients = (hourFloat?: number): GradientResult => {
-  const h = hourFloat ?? getLocalHourFloat()
+  let h = hourFloat ?? getLocalHourFloat()
+
+  // 凌晨 0:00–6:00：h+24 映射到 24~30 区间，利用 KEY_STOPS 的环绕节点
+  if (h < KEY_STOPS[0]![0]) {
+    h += 24
+  }
 
   let prev = KEY_STOPS[0]!
   let next = KEY_STOPS[1]!
@@ -89,21 +94,29 @@ export const computeGradients = (hourFloat?: number): GradientResult => {
   const range = next[0] - prev[0]
   const t = (h - prev[0]) / range
 
+  // 映射回真实小时数（0-23），用于 data-time-theme 判断
+  const intHour = Math.floor(h) % 24
+
   return {
     lightGrad: toGradient(lerpColors(prev[1].light, next[1].light, t)),
     darkGrad: toGradient(lerpColors(prev[1].dark, next[1].dark, t)),
-    intHour: Math.floor(h),
+    intHour,
   }
 }
 
 /** 将渐变结果写入 DOM（在 app 挂载前调用可消除闪烁） */
 export const applyGradients = (): GradientResult => {
   const { lightGrad, darkGrad, intHour } = computeGradients()
+  const isMorning = intHour >= 6 && intHour < 18
 
   const root = document.documentElement
-  root.setAttribute('data-time-theme', intHour >= 6 && intHour < 18 ? 'morning' : 'evening')
+  root.setAttribute('data-time-theme', isMorning ? 'morning' : 'evening')
+
+  // JS 直接设置 CSS 变量，绕过 CSS 属性选择器加载时序问题
   root.style.setProperty('--bg-gradient-dynamic', lightGrad)
   root.style.setProperty('--bg-gradient-dynamic-dark', darkGrad)
+  root.style.setProperty('--color-bg-gradient', `var(--bg-gradient-dynamic, var(--bg-gradient-morning))`)
+  root.style.setProperty('--color-bg-gradient-dark', `var(--bg-gradient-dynamic-dark, var(--bg-gradient-dark-evening))`)
 
   return { lightGrad, darkGrad, intHour }
 }
