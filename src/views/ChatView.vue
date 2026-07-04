@@ -170,6 +170,13 @@
       </div>
     </div>
   </div>
+  <!-- 地区选择弹窗（IP 无法识别时弹出） -->
+  <RegionSelector
+    v-if="showGeoModal"
+    :user-id="chatStore.currentUserId"
+    @confirmed="handleGeoConfirm"
+    @cancelled="showGeoModal = false; initAfterLogin()"
+  />
 </template>
 
 <script setup lang="ts">
@@ -183,9 +190,10 @@ import DOMPurify from 'dompurify'
 
 
 // ===== 新增代码（仅加这两行）=====
-import { saveChatRecord, registerUser } from '../api/chat' // 导入保存数据库的接口
+import { saveChatRecord, registerUser, updateUserGeo } from '../api/chat' // 导入保存数据库的接口
 import type { ChatRecord } from '../types/chat' // 导入数据库记录类型
 import { sendAlertToTeacher } from '../api/chat'
+import RegionSelector from '../components/RegionSelector.vue'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -297,6 +305,7 @@ const renderMarkdown = (content: string): string => {
 const chatStore = useChatStore()
 const inputText = ref('')
 const showUserModal = ref(false)
+const showGeoModal = ref(false)
 const userIdInput = ref('')
 const userIp = ref('')
 const showContextLimitTip = ref(false)
@@ -323,7 +332,22 @@ const confirmUserId = async () => {
   try {
     const { data } = await registerUser(name)
     if (data.code === 200) {
-      chatStore.setUserInfo(String(data.data.id), data.data.username)
+      const userData = data.data
+      chatStore.setUserInfo(String(userData.id), userData.username)
+      chatStore.setUserGeo(
+        userData.region || '',
+        userData.country_code || '',
+        userData.country_name || '',
+        userData.manual_geo || false,
+      )
+      showUserModal.value = false
+      userIdInput.value = ''
+      // 如果 IP 未识别且用户未手动选择过，弹出地区选择器
+      if (userData.region === 'Unknown' && !userData.manual_geo) {
+        showGeoModal.value = true
+        return
+      }
+      await initAfterLogin()
     } else {
       alert(data.message || '注册失败，请重试')
       return
@@ -332,8 +356,10 @@ const confirmUserId = async () => {
     alert('网络错误，请重试')
     return
   }
-  showUserModal.value = false
-  userIdInput.value = ''
+}
+
+const handleGeoConfirm = async () => {
+  showGeoModal.value = false
   await initAfterLogin()
 }
 

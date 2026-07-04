@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# ⚠️ 历史文件 — 已被 main.py + database.py 替代，不再作为生产入口
+# 原 ip2region 方案已迁移至 MaxMind GeoLite2，请使用 uvicorn main:app 启动
+
 import logging
 import os
 from contextlib import asynccontextmanager

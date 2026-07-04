@@ -207,6 +207,18 @@ export const registerUser = async (displayName: string) => {
 }
 
 /**
+ * 手动更新用户地理位置信息
+ */
+export const updateUserGeo = async (data: {
+  user_id: string
+  region: string
+  country_code: string
+  country_name: string
+}) => {
+  return chatDbApi.put('/user-geo', data)
+}
+
+/**
  * 获取指定会话的历史对话记录
  * @param session_id 会话ID
  * @param user_id 可选：用户ID（默认default_user）

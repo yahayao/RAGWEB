@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import threading
+from dataclasses import dataclass
 from datetime import datetime
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
+from pathlib import Path
 from typing import Any, cast
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, create_engine, event, text
@@ -14,16 +18,11 @@ from sqlalchemy.orm import Mapped, Session, declarative_base, mapped_column, rel
 from time_util import to_str_time as _to_str_time
 
 try:
-    import ip2region.searcher as ip2xdb  # type: ignore[import-not-found]
-    import ip2region.util as ip2util  # type: ignore[import-not-found]
+    import geoip2.database
+    from geoip2.errors import AddressNotFoundError
 except Exception:  # pragma: no cover
-    ip2xdb = None
-    ip2util = None
-
-try:
-    import IP2Location  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    IP2Location = None
+    geoip2 = None
+    AddressNotFoundError = Exception
 
 logger = logging.getLogger(__name__)
 
@@ -61,16 +60,26 @@ DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
 DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))
 DB_ECHO = os.getenv("DB_ECHO", "false").lower() in {"1", "true", "yes", "on"}
 
-# IP2Region 数据文件路径
-IP2REGION_DB_PATH = os.getenv(
-    "IP2REGION_DB_PATH",
-    os.path.join(os.path.dirname(__file__), "ip2region", "data", "ip2region_v4.xdb"),
+# MaxMind GeoLite2 City 数据库路径
+GEOLITE2_CITY_DB_PATH = os.getenv(
+    "GEOLITE2_CITY_DB_PATH",
+    os.path.join(os.path.dirname(__file__), "geoip", "GeoLite2-City.mmdb"),
 )
 
-# IP2Location BIN 文件路径
-IP2LOCATION_DB_PATH = os.getenv(
-    "IP2LOCATION_DB_PATH",
-    os.path.join(os.path.dirname(__file__), "ip2region", "data", "IP2LOCATION-LITE-DB3.BIN"),
+# 热重载检查间隔（秒）
+GEOIP_RELOAD_INTERVAL_SECONDS = int(
+    os.getenv("GEOIP_RELOAD_INTERVAL_SECONDS", "300")
+)
+
+# geoipupdate 下载间隔（秒），默认 12 小时
+GEOIP_UPDATE_INTERVAL_SECONDS = int(
+    os.getenv("GEOIP_UPDATE_INTERVAL_SECONDS", "43200")
+)
+
+# 可信代理 CIDR 列表，只有直接连接来自这些地址时才信任转发 Header
+TRUSTED_PROXY_CIDRS = os.getenv(
+    "TRUSTED_PROXY_CIDRS",
+    "127.0.0.1/32,::1/128",
 )
 
 # ==================== 数据库引擎 ====================
@@ -96,10 +105,63 @@ def _set_timezone(dbapi_connection, _connection_record):
     cursor.execute("SET TIME ZONE 'Asia/Shanghai'")
     cursor.close()
 
-# ==================== 全局检索实例 ====================
+# ==================== 全局 GeoIP 状态 ====================
 
-_searcher = None          # ip2region xdb 检索器
-_location_db = None       # IP2Location 实例
+_geoip_reader = None             # geoip2.database.Reader 实例
+_geoip_lock = threading.RLock()  # 保护 Reader 的读写锁
+_geoip_file_signature = None     # (inode, mtime_ns, size) 文件签名
+_geoip_build_epoch = None        # 数据库 build epoch
+_geoip_last_reload_time = None   # 最后成功加载时间
+
+
+# ==================== 中国省份映射 ====================
+
+CN_PROVINCE_MAP = {
+    "AH": "安徽省",
+    "BJ": "北京市",
+    "CQ": "重庆市",
+    "FJ": "福建省",
+    "GS": "甘肃省",
+    "GD": "广东省",
+    "GX": "广西壮族自治区",
+    "GZ": "贵州省",
+    "HI": "海南省",
+    "HE": "河北省",
+    "HL": "黑龙江省",
+    "HA": "河南省",
+    "HB": "湖北省",
+    "HN": "湖南省",
+    "JS": "江苏省",
+    "JX": "江西省",
+    "JL": "吉林省",
+    "LN": "辽宁省",
+    "NM": "内蒙古自治区",
+    "NX": "宁夏回族自治区",
+    "QH": "青海省",
+    "SN": "陕西省",
+    "SD": "山东省",
+    "SH": "上海市",
+    "SX": "山西省",
+    "SC": "四川省",
+    "TJ": "天津市",
+    "XZ": "西藏自治区",
+    "XJ": "新疆维吾尔自治区",
+    "YN": "云南省",
+    "ZJ": "浙江省",
+}
+
+
+# ==================== 查询结果对象 ====================
+
+
+@dataclass(frozen=True, slots=True)
+class GeoLookupResult:
+    """IP 地理位置查询结果"""
+    ip: str
+    country_code: str | None
+    country_name: str
+    region: str
+    source: str  # "geolite2" 或 "unresolved"
 
 
 # ==================== ORM 模型 ====================
@@ -114,6 +176,20 @@ class ChatUser(Base):
     username: Mapped[str] = mapped_column(String(64), nullable=False)
     ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     region: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    country_code: Mapped[str | None] = mapped_column(
+        String(2),
+        nullable=True,
+        index=True,
+    )
+    country_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    manual_geo: Mapped[bool] = mapped_column(
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+    )
     create_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=False),
         nullable=False,
@@ -185,6 +261,247 @@ def get_db():
 # ==================== IP 工具函数 ====================
 
 
+def normalize_ip(raw_ip: str) -> str | None:
+    """规范化 IP 地址，返回合法 IP 字符串或 None
+
+    支持: IPv4, IPv6, IPv4-mapped IPv6, [IPv6]:port, zone ID, 端口号剥离
+    """
+    ip_val = (raw_ip or "").strip().strip('"').strip("'")
+    if not ip_val or ip_val.lower() == "unknown":
+        return None
+
+    # [IPv6]:port 格式
+    if ip_val.startswith("[") and "]" in ip_val:
+        ip_val = ip_val[1 : ip_val.index("]")]
+
+    # IPv4-mapped IPv6
+    if ip_val.startswith("::ffff:"):
+        ip_val = ip_val[7:]
+
+    # zone ID
+    if "%" in ip_val:
+        ip_val = ip_val.split("%", 1)[0]
+
+    # IPv4:port 格式
+    if ip_val.count(":") == 1 and "." in ip_val:
+        host, port = ip_val.rsplit(":", 1)
+        if port.isdigit():
+            ip_val = host
+
+    try:
+        ip_address(ip_val)
+        return ip_val
+    except ValueError:
+        return None
+
+
+def _parse_trusted_cidrs() -> list[ip_network]:
+    """解析 TRUSTED_PROXY_CIDRS 环境变量为 ip_network 列表"""
+    networks: list[ip_network] = []
+    for raw in TRUSTED_PROXY_CIDRS.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            networks.append(ip_network(raw))
+        except ValueError:
+            logger.warning("无效的 TRUSTED_PROXY_CIDRS 条目: %s", raw)
+    return networks
+
+
+def _is_trusted_proxy(ip_str: str) -> bool:
+    """判断 IP 是否属于可信代理范围"""
+    try:
+        addr = ip_address(ip_str)
+    except ValueError:
+        return False
+    for net in _parse_trusted_cidrs():
+        if addr in net:
+            return True
+    return False
+
+
+def extract_client_ip(req: Any) -> str:
+    """按反向代理常见头顺序提取真实客户端地址
+
+    安全规则: 只有直接连接来源在 TRUSTED_PROXY_CIDRS 中时，才信任转发 Header。
+    否则忽略所有转发头，使用直连 IP。
+    """
+    # 获取直连地址
+    remote_addr = cast(str | None, req.client.host if req.client else None)
+    direct_ip = _parse_ip_candidate((remote_addr or "").strip())
+
+    if not direct_ip:
+        return "0.0.0.0"
+
+    # 只有直接连接来源可信时才解析转发 Header
+    if not _is_trusted_proxy(direct_ip):
+        return direct_ip
+
+    # 可信来源：依次尝试各转发 Header
+    direct_headers = [
+        req.headers.get("CF-Connecting-IP", ""),
+        req.headers.get("True-Client-IP", ""),
+        req.headers.get("X-Real-IP", ""),
+        req.headers.get("X-Client-IP", ""),
+    ]
+    chosen = _prefer_public_ip(direct_headers)
+    if chosen:
+        return chosen
+
+    # X-Forwarded-For: 从右向左遍历，跳过可信代理
+    xff = req.headers.get("X-Forwarded-For", "").strip()
+    if xff:
+        xff_candidates = [p.strip() for p in xff.split(",")]
+        # 从右向左：最后一个非可信代理 IP 就是客户端真实 IP
+        for candidate in reversed(xff_candidates):
+            ip = _parse_ip_candidate(candidate)
+            if ip and not _is_trusted_proxy(ip):
+                return ip
+
+    # Forwarded 头 (RFC 7239)
+    forwarded = req.headers.get("Forwarded", "").strip()
+    if forwarded:
+        forwarded_candidates: list[str] = []
+        for seg in forwarded.split(","):
+            for item in seg.split(";"):
+                kv = item.strip()
+                if kv.lower().startswith("for="):
+                    forwarded_candidates.append(kv.split("=", 1)[1].strip())
+        chosen = _prefer_public_ip(forwarded_candidates)
+        if chosen:
+            return chosen
+
+    return direct_ip
+
+
+def _get_file_signature(path: str) -> tuple[int, int, int] | None:
+    """获取文件签名: (inode, mtime_ns, size)"""
+    try:
+        stat = os.stat(path)
+        return (stat.st_ino, stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return None
+
+
+def lookup_geo(raw_ip: str) -> GeoLookupResult:
+    """查询 IP 地理位置信息（使用 GeoLite2 City）
+
+    返回 GeoLookupResult，包含: ip, country_code, country_name, region, source
+
+    区域规则:
+    - 中国大陆 (CN): country_code=CN, country_name=中国, region=省份名 (或 Unknown)
+    - 香港 (HK): country_code=HK, country_name=中国香港, region=香港特别行政区
+    - 澳门 (MO): country_code=MO, country_name=中国澳门, region=澳门特别行政区
+    - 台湾 (TW): country_code=TW, country_name=中国台湾, region=台湾省
+    - 其他已识别国家: region=海外, country_code/country_name 保留具体值
+    - 无法识别: country_code=None, country_name=Unknown, region=Unknown, source=unresolved
+    """
+    # 规范化 IP
+    normalized = normalize_ip(raw_ip)
+    if normalized is None:
+        return GeoLookupResult(
+            ip=raw_ip.strip() or "0.0.0.0",
+            country_code=None,
+            country_name="Unknown",
+            region="Unknown",
+            source="unresolved",
+        )
+
+    # 验证是否为合法 IP 地址
+    try:
+        parsed_ip = ip_address(normalized)
+    except ValueError:
+        return GeoLookupResult(
+            ip=normalized,
+            country_code=None,
+            country_name="Unknown",
+            region="Unknown",
+            source="unresolved",
+        )
+
+    # 公网 IP 才查询 GeoLite2
+    if not parsed_ip.is_global:
+        return GeoLookupResult(
+            ip=normalized,
+            country_code=None,
+            country_name="Unknown",
+            region="Unknown",
+            source="unresolved",
+        )
+
+    # 查询 GeoLite2
+    with _geoip_lock:
+        reader = _geoip_reader
+
+    if reader is None:
+        return GeoLookupResult(
+            ip=normalized,
+            country_code=None,
+            country_name="Unknown",
+            region="Unknown",
+            source="unresolved",
+        )
+
+    try:
+        response = reader.city(normalized)
+    except AddressNotFoundError:
+        return GeoLookupResult(
+            ip=normalized,
+            country_code=None,
+            country_name="Unknown",
+            region="Unknown",
+            source="geolite2",
+        )
+    except Exception:
+        return GeoLookupResult(
+            ip=normalized,
+            country_code=None,
+            country_name="Unknown",
+            region="Unknown",
+            source="unresolved",
+        )
+
+    # 解析国家信息
+    country_code = (response.country.iso_code or "").strip() or None
+    country_name = response.country.name or country_code or "Unknown"
+
+    # 业务规则覆盖
+    if country_code == "CN":
+        country_name = "中国"
+        subdivision = response.subdivisions[0] if response.subdivisions else None
+        subdivision_code = subdivision.iso_code.strip() if subdivision and subdivision.iso_code else None
+        region = CN_PROVINCE_MAP.get(subdivision_code, "Unknown") if subdivision_code else "Unknown"
+    elif country_code == "HK":
+        country_name = "中国香港"
+        region = "香港特别行政区"
+    elif country_code == "MO":
+        country_name = "中国澳门"
+        region = "澳门特别行政区"
+    elif country_code == "TW":
+        country_name = "中国台湾"
+        region = "台湾省"
+    else:
+        region = "海外"
+
+    return GeoLookupResult(
+        ip=normalized,
+        country_code=country_code,
+        country_name=country_name,
+        region=region,
+        source="geolite2",
+    )
+
+
+def lookup_region(raw_ip: str) -> tuple[str, str]:
+    """兼容旧接口: 返回 (ip, region) 元组"""
+    result = lookup_geo(raw_ip)
+    return result.ip, result.region
+
+
+# ==================== 保留旧辅助（extract_client_ip 依赖） ====================
+
+
 def _parse_ip_candidate(value: str) -> str | None:
     """规范化候选 IP：去掉引号、端口、IPv6 zone、IPv4-mapped 前缀"""
     candidate = (value or "").strip().strip('"').strip("'")
@@ -227,96 +544,31 @@ def _prefer_public_ip(candidates: list[str]) -> str | None:
     return parsed[0] if parsed else None
 
 
-def extract_client_ip(req: Any) -> str:
-    """按反向代理常见头顺序提取真实客户端地址"""
-    direct_headers = [
-        req.headers.get("CF-Connecting-IP", ""),
-        req.headers.get("True-Client-IP", ""),
-        req.headers.get("X-Real-IP", ""),
-        req.headers.get("X-Client-IP", ""),
-    ]
-    chosen = _prefer_public_ip(direct_headers)
-    if chosen:
-        return chosen
-
-    xff = req.headers.get("X-Forwarded-For", "").strip()
-    if xff:
-        chosen = _prefer_public_ip([p.strip() for p in xff.split(",")])
-        if chosen:
-            return chosen
-
-    forwarded = req.headers.get("Forwarded", "").strip()
-    if forwarded:
-        forwarded_candidates: list[str] = []
-        for seg in forwarded.split(","):
-            for item in seg.split(";"):
-                kv = item.strip()
-                if kv.lower().startswith("for="):
-                    forwarded_candidates.append(kv.split("=", 1)[1].strip())
-        chosen = _prefer_public_ip(forwarded_candidates)
-        if chosen:
-            return chosen
-
-    remote_addr = cast(str | None, req.client.host if req.client else None)
-    return _parse_ip_candidate((remote_addr or "").strip()) or "0.0.0.0"
-
-
-def normalize_ip(raw_ip: str) -> str:
-    ip_val = (raw_ip or "0.0.0.0").strip()
-    if ip_val.startswith("::ffff:"):
-        ip_val = ip_val[7:]
-    if "%" in ip_val:
-        ip_val = ip_val.split("%", 1)[0]
-    return ip_val
-
-
-def lookup_region(raw_ip: str) -> tuple[str, str]:
-    """查询 IP 归属地，支持 ip2region xdb 和 IP2Location BIN 两种方式"""
-    ip_val = normalize_ip(raw_ip)
-    try:
-        ip_address(ip_val)
-    except ValueError:
-        return ip_val, "Unknown"
-
-    # 优先使用 ip2region xdb
-    if _searcher is not None:
-        try:
-            region = _searcher.search(ip_val)
-            return ip_val, (region or "Unknown")
-        except Exception:
-            pass
-
-    # 回退到 IP2Location
-    if _location_db is not None:
-        try:
-            record = _location_db.get_all(ip_val)
-            country = _clean_location_value(getattr(record, "country_name", ""))
-            region = _clean_location_value(getattr(record, "region_name", ""))
-            city = _clean_location_value(getattr(record, "city_name", ""))
-            parts = [country, region, city]
-            combined = " | ".join([p for p in parts if p])
-            return ip_val, (combined or "Unknown")
-        except Exception:
-            pass
-
-    return ip_val, "Unknown"
-
-
-def _clean_location_value(value: Any) -> str:
-    text_value = str(value or "").strip()
-    if not text_value or text_value in {"-", "NOT_SUPPORTED", "Not_Supported"}:
-        return ""
-    return text_value
-
-
 def register_user(db: Session, display_name_raw: str, client_ip: str) -> dict:
-    """注册新用户：自增 id 作为唯一标识，username 存展示名（可重复）"""
+    """注册新用户：自增 id 作为唯一标识，username 存展示名（可重复）
+
+    每次注册都会查询 IP 归属地并写入 geo 字段。
+    如果用户已设置 manual_geo=True，则保留其手动选择的地理位置。
+    """
     username = (display_name_raw or "").strip()[:64] or "匿名用户"
-    ip_val, region = lookup_region(client_ip)
-    user = ChatUser(username=username, ip=ip_val, region=region)
+    geo = lookup_geo(client_ip)
+    user = ChatUser(
+        username=username,
+        ip=geo.ip,
+        region=geo.region,
+        country_code=geo.country_code,
+        country_name=geo.country_name,
+    )
     db.add(user)
     db.flush()
-    return {"id": int(user.id), "username": user.username}
+    return {
+        "id": int(user.id),
+        "username": user.username,
+        "region": user.region,
+        "country_code": user.country_code,
+        "country_name": user.country_name,
+        "manual_geo": user.manual_geo,
+    }
 
 
 def parse_user_id(raw: str | None) -> int | None:
@@ -337,46 +589,170 @@ def user_exists(db: Session, user_id: int) -> bool:
 
 
 def init_searcher() -> None:
-    """启动时加载 IP 检索器，避免每次请求重复读取文件"""
-    global _searcher, _location_db
+    """启动时加载 MaxMind GeoLite2 City 数据库 Reader
 
-    # 初始化 ip2region
-    if ip2xdb is not None and ip2util is not None and os.path.exists(IP2REGION_DB_PATH):
-        try:
-            ip2util.verify_from_file(IP2REGION_DB_PATH)
-            with open(IP2REGION_DB_PATH, "rb") as handle:
-                header = ip2util.load_header(handle)
-                version = ip2util.version_from_header(header)
-                if version is not None:
-                    v_index = ip2util.load_vector_index(handle)
-                    _searcher = ip2xdb.new_with_vector_index(version, IP2REGION_DB_PATH, v_index)
-        except Exception as exc:
-            logger.warning("初始化 ip2region 失败: %s", exc)
+    加载失败不阻止应用启动，只记录 warning。
+    Reader 不可用时 IP 查询返回 Unknown。
+    """
+    global _geoip_reader, _geoip_file_signature, _geoip_build_epoch, _geoip_last_reload_time
 
-    # 初始化 IP2Location
-    if IP2Location is not None and os.path.exists(IP2LOCATION_DB_PATH):
-        try:
-            _location_db = IP2Location.IP2Location(IP2LOCATION_DB_PATH)
-        except Exception as exc:
-            logger.warning("初始化 IP2Location 失败: %s", exc)
+    if geoip2 is None:
+        logger.warning("geoip2 库未安装，IP 地理位置查询不可用")
+        return
+
+    db_path = GEOLITE2_CITY_DB_PATH
+    if not os.path.exists(db_path):
+        logger.warning("GeoLite2-City 数据库文件不存在: %s", db_path)
+        return
+
+    try:
+        reader = geoip2.database.Reader(db_path, locales=["zh-CN", "en"])
+        # 验证数据库类型
+        metadata = reader.metadata()
+        if metadata.database_type != "GeoLite2-City":
+            logger.warning(
+                "数据库类型不匹配: 期望 GeoLite2-City, 实际 %s",
+                metadata.database_type,
+            )
+            reader.close()
+            return
+
+        _geoip_build_epoch = metadata.build_epoch
+        _geoip_file_signature = _get_file_signature(db_path)
+        _geoip_last_reload_time = datetime.now()
+        _geoip_reader = reader
+        logger.info(
+            "GeoLite2-City 加载成功: build_epoch=%s, path=%s",
+            _geoip_build_epoch,
+            db_path,
+        )
+    except Exception as exc:
+        logger.warning("初始化 GeoLite2-City 失败: %s", exc)
 
 
 def close_searcher() -> None:
-    """关闭检索器，释放资源"""
-    global _searcher, _location_db
+    """关闭 GeoLite2 Reader，释放资源"""
+    global _geoip_reader, _geoip_file_signature, _geoip_build_epoch, _geoip_last_reload_time
 
-    if _searcher is not None:
+    with _geoip_lock:
+        reader = _geoip_reader
+        _geoip_reader = None
+
+    if reader is not None:
         try:
-            _searcher.close()
+            reader.close()
         except Exception:
             pass
-        _searcher = None
 
-    if _location_db is not None:
+    _geoip_file_signature = None
+    _geoip_build_epoch = None
+    _geoip_last_reload_time = None
+
+
+def reload_searcher_if_changed() -> bool:
+    """检查 MMDB 文件是否变化，若变化则在锁外创建新 Reader 后原子替换
+
+    返回 True 表示成功热重载，False 表示无变化或重载失败。
+    失败时保留旧 Reader 继续服务。
+    """
+    global _geoip_reader, _geoip_file_signature, _geoip_build_epoch, _geoip_last_reload_time
+
+    db_path = GEOLITE2_CITY_DB_PATH
+    if not os.path.exists(db_path):
+        return False
+
+    new_sig = _get_file_signature(db_path)
+    if new_sig is None:
+        return False
+
+    with _geoip_lock:
+        old_sig = _geoip_file_signature
+
+    if new_sig == old_sig:
+        return False
+
+    # 文件变化，在锁外创建新 Reader
+    try:
+        new_reader = geoip2.database.Reader(db_path, locales=["zh-CN", "en"])
+        metadata = new_reader.metadata()
+        if metadata.database_type != "GeoLite2-City":
+            logger.warning("热重载: 新数据库类型不匹配，跳过")
+            new_reader.close()
+            return False
+    except Exception as exc:
+        logger.warning("热重载 GeoLite2-City 失败 (创建新 Reader): %s", exc)
+        return False
+
+    # 原子替换
+    with _geoip_lock:
+        old_reader = _geoip_reader
+        _geoip_reader = new_reader
+        _geoip_file_signature = new_sig
+        _geoip_build_epoch = metadata.build_epoch
+        _geoip_last_reload_time = datetime.now()
+
+    # 关闭旧 Reader（锁外，确保没有查询在使用）
+    if old_reader is not None:
         try:
-            close_fn = getattr(_location_db, "close", None)
-            if callable(close_fn):
-                close_fn()
+            old_reader.close()
         except Exception:
             pass
-        _location_db = None
+
+    logger.info(
+        "GeoLite2-City 热重载成功: build_epoch=%s",
+        metadata.build_epoch,
+    )
+    return True
+
+
+def run_geoipupdate() -> bool:
+    """通过子进程调用 geoipupdate 下载最新 GeoLite2-City 数据库
+
+    使用系统的 /etc/GeoIP.conf 配置文件，不需要在 .env 中额外存储凭证。
+    返回 True 表示下载成功，False 表示失败。
+    失败时保留现有 MMDB 文件不变。
+    """
+    geoip_dir = os.path.dirname(GEOLITE2_CITY_DB_PATH)
+    try:
+        result = subprocess.run(
+            ["geoipupdate", "-f", "/etc/GeoIP.conf", "-d", geoip_dir],
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 分钟超时
+        )
+        if result.returncode == 0:
+            logger.info("geoipupdate 下载成功: %s", result.stdout.strip())
+            return True
+        else:
+            logger.warning(
+                "geoipupdate 下载失败 (exit=%d): %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+            return False
+    except FileNotFoundError:
+        logger.warning("geoipupdate 命令未找到，请安装 geoipupdate 工具")
+        return False
+    except subprocess.TimeoutExpired:
+        logger.warning("geoipupdate 下载超时（5 分钟）")
+        return False
+    except Exception as exc:
+        logger.warning("geoipupdate 执行异常: %s", exc)
+        return False
+
+
+def get_geoip_status() -> dict[str, Any]:
+    """获取 GeoIP 当前状态（用于健康检查）"""
+    with _geoip_lock:
+        available = _geoip_reader is not None
+        build_epoch = _geoip_build_epoch
+        last_reload = _geoip_last_reload_time
+
+    from time_util import to_str_time
+
+    return {
+        "available": available,
+        "database_build_epoch": build_epoch,
+        "last_reload_time": to_str_time(last_reload) if last_reload else None,
+        "reload_interval_seconds": GEOIP_RELOAD_INTERVAL_SECONDS,
+    }

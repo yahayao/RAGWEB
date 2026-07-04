@@ -18,7 +18,7 @@ from sqlalchemy import func
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from database import ChatUser, ChatSession, SessionLocal, extract_client_ip, lookup_region
+from database import ChatUser, ChatSession, SessionLocal, extract_client_ip, lookup_geo
 from email_sender import send_alert_email
 from time_util import cst_today_str, cst_days_ago_str, cst_time_str
 
@@ -146,7 +146,7 @@ async def receive_alert(request: Request) -> JSONResponse:
 
     # 提取客户端 IP 并查询归属地
     client_ip = extract_client_ip(request)
-    resolved_ip, region = lookup_region(client_ip)
+    geo = lookup_geo(client_ip)
 
     # 推送到所有大屏客户端（保持现有逻辑不变）
     await manager.broadcast(
@@ -167,8 +167,9 @@ async def receive_alert(request: Request) -> JSONResponse:
     email_data = {
         "contact": contact,
         "student_name": student_name,
-        "client_ip": resolved_ip,
-        "region": region,
+        "client_ip": geo.ip,
+        "region": geo.region,
+        "country_name": geo.country_name,
         "intent_type": intent_type,
         "message_snippet": message_snippet,
         "session_id": session_id,
@@ -177,12 +178,13 @@ async def receive_alert(request: Request) -> JSONResponse:
     asyncio.create_task(send_alert_email(email_data))
 
     logger.info(
-        "收到人工介入告警: contact=%s, type=%s, student=%s, ip=%s, region=%s",
+        "收到人工介入告警: contact=%s, type=%s, student=%s, ip=%s, country=%s, region=%s",
         contact,
         intent_type,
         student_name,
-        resolved_ip,
-        region,
+        geo.ip,
+        geo.country_name,
+        geo.region,
     )
 
     return JSONResponse(
@@ -203,12 +205,18 @@ async def receive_alert(request: Request) -> JSONResponse:
 
 @router.get("/api/dashboard/ip-distribution")
 def ip_distribution(request: Request) -> JSONResponse:
-    """获取用户 IP 归属地分布数据（用于中国地图渲染）"""
+    """获取用户 IP 归属地分布数据（用于中国地图渲染），含海外/未知统计"""
     db = SessionLocal()
     try:
+        # 中国省份数据（排除海外和未知）
         rows = (
             db.query(ChatUser.region, func.count(ChatUser.id).label("user_count"))
-            .filter(ChatUser.region.isnot(None), ChatUser.region != "", ChatUser.region != "Unknown")
+            .filter(
+                ChatUser.region.isnot(None),
+                ChatUser.region != "",
+                ChatUser.region != "Unknown",
+                ChatUser.region != "海外",
+            )
             .group_by(ChatUser.region)
             .order_by(func.count(ChatUser.id).desc())
             .limit(100)
@@ -224,9 +232,35 @@ def ip_distribution(request: Request) -> JSONResponse:
                 }
             )
 
+        # 海外和未知统计
+        overseas_count = (
+            db.query(func.count(ChatUser.id))
+            .filter(ChatUser.region == "海外")
+            .scalar()
+            or 0
+        )
+        unknown_count = (
+            db.query(func.count(ChatUser.id))
+            .filter(
+                (ChatUser.region.is_(None))
+                | (ChatUser.region == "")
+                | (ChatUser.region == "Unknown")
+            )
+            .scalar()
+            or 0
+        )
+
         return JSONResponse(
             status_code=200,
-            content={"code": 200, "message": "查询成功", "data": data},
+            content={
+                "code": 200,
+                "message": "查询成功",
+                "data": data,
+                "summary": {
+                    "overseas_count": overseas_count,
+                    "unknown_count": unknown_count,
+                },
+            },
         )
     except Exception as exc:
         logger.exception("获取 IP 分布失败")

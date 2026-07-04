@@ -18,6 +18,14 @@ export const useChatStore = defineStore('chat', {
     currentUserId: localStorage.getItem('chat_user_id') ?? '',
     currentDisplayName: localStorage.getItem('chat_display_name') ?? '',
 
+    // 用户地理位置信息
+    userGeo: {
+      region: localStorage.getItem('chat_user_region') ?? '',
+      country_code: localStorage.getItem('chat_user_country_code') ?? '',
+      country_name: localStorage.getItem('chat_user_country_name') ?? '',
+      manual_geo: localStorage.getItem('chat_user_manual_geo') === 'true',
+    },
+
     showContactModal: false,
     pendingAlertType: null as 'high_intent' | 'urgent' | null, 
     contactInfo: { 
@@ -41,6 +49,16 @@ export const useChatStore = defineStore('chat', {
       this.currentDisplayName = displayName
       localStorage.setItem('chat_user_id', uid)
       localStorage.setItem('chat_display_name', displayName)
+    },
+    setUserGeo(region: string, country_code: string, country_name: string, manual_geo: boolean) {
+      this.userGeo.region = region
+      this.userGeo.country_code = country_code
+      this.userGeo.country_name = country_name
+      this.userGeo.manual_geo = manual_geo
+      localStorage.setItem('chat_user_region', region)
+      localStorage.setItem('chat_user_country_code', country_code)
+      localStorage.setItem('chat_user_country_name', country_name)
+      localStorage.setItem('chat_user_manual_geo', String(manual_geo))
     },
     addMessage(message: Message) {
       this.messages.push(message)

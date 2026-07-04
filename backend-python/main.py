@@ -12,8 +12,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
+import threading
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,13 +34,47 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时建表+初始化 IP 检索器，关闭时释放资源"""
+    """启动时建表+初始化 IP 检索器+启动热重载任务，关闭时释放资源"""
     database.ensure_schema()
     database.init_searcher()
+
+    # 后台维护任务（热重载 + 定时下载）
+    stop_event = threading.Event()
+    maint_task = asyncio.create_task(_geoip_maint_loop(stop_event))
+
     logger.info("RAGWEB backend started")
     yield
+
+    # 关闭后台任务
+    stop_event.set()
+    maint_task.cancel()
+    try:
+        await maint_task
+    except asyncio.CancelledError:
+        pass
+
     database.close_searcher()
     logger.info("RAGWEB backend stopped")
+
+
+async def _geoip_maint_loop(stop_event: threading.Event) -> None:
+    """后台定期维护 GeoLite2 数据库：热重载 + 定时下载"""
+    reload_interval = database.GEOIP_RELOAD_INTERVAL_SECONDS
+    update_interval = database.GEOIP_UPDATE_INTERVAL_SECONDS
+    elapsed = 0
+
+    while not stop_event.is_set():
+        await asyncio.sleep(1)
+        elapsed += 1
+
+        # 热重载检查
+        if elapsed % reload_interval == 0:
+            await asyncio.to_thread(database.reload_searcher_if_changed)
+
+        # 定时下载更新
+        if elapsed % update_interval == 0:
+            await asyncio.to_thread(database.run_geoipupdate)
+            await asyncio.to_thread(database.reload_searcher_if_changed)
 
 
 app = FastAPI(
@@ -100,6 +136,57 @@ async def register_user(request: Request) -> JSONResponse:
     except Exception as exc:
         db.rollback()
         logger.exception("用户注册失败")
+        return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
+    finally:
+        db.close()
+
+
+@app.put("/api/chat/user-geo")
+async def update_user_geo(request: Request) -> JSONResponse:
+    """手动更新用户地理位置信息（用户在前端自行选择）
+    
+    Body: { "user_id": 1, "region": "广东省", "country_code": "CN", "country_name": "中国" }
+    设置后会标记 manual_geo=true，后续 IP 变更不再覆盖。
+    """
+    body = await _safe_json_body(request)
+    user_id = database.parse_user_id(str(body.get("user_id") or ""))
+    region = str(body.get("region") or "").strip()
+    country_code = str(body.get("country_code") or "").strip() or None
+    country_name = str(body.get("country_name") or "").strip()
+
+    if not user_id:
+        return JSONResponse(status_code=400, content={"code": 400, "message": "缺少有效 user_id"})
+    if not region:
+        return JSONResponse(status_code=400, content={"code": 400, "message": "缺少 region"})
+
+    db = database.SessionLocal()
+    try:
+        if not database.user_exists(db, user_id):
+            return JSONResponse(status_code=404, content={"code": 404, "message": "用户不存在"})
+
+        db.query(database.ChatUser).filter(database.ChatUser.id == user_id).update(
+            {
+                "region": region,
+                "country_code": country_code,
+                "country_name": country_name or "Unknown",
+                "manual_geo": True,
+            },
+            synchronize_session=False,
+        )
+        db.commit()
+        return JSONResponse(status_code=200, content={
+            "code": 200,
+            "message": "地理位置更新成功",
+            "data": {
+                "user_id": user_id,
+                "region": region,
+                "country_code": country_code,
+                "country_name": country_name or "Unknown",
+            },
+        })
+    except Exception as exc:
+        db.rollback()
+        logger.exception("更新用户地理位置失败")
         return JSONResponse(status_code=500, content={"code": 500, "message": f"服务器错误: {exc}"})
     finally:
         db.close()

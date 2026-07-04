@@ -277,7 +277,7 @@
     <div class="main-grid">
       <!-- 左上：中国地图 IP 分布 -->
       <div class="panel">
-        <div class="panel-header">用户 IP 归属地分布</div>
+        <div class="panel-header">用户 IP 归属地分布 <span style="margin-left:12px;font-size:13px;color:#4facfe;">海外：<strong id="stat-overseas">-</strong></span></div>
         <div class="panel-body" id="chart-map"></div>
       </div>
 
@@ -577,6 +577,11 @@
           const json = await resp.json()
           const rawData = json.data || []
 
+          // 更新海外统计
+          if (json.summary) {
+            document.getElementById('stat-overseas').textContent = json.summary.overseas_count ?? 0
+          }
+
           const provinceMap = buildProvinceMap(rawData)
 
           // 转换为 ECharts 地图数据格式
@@ -789,6 +794,10 @@
             const mapJson = await mapResp.json()
             if (mapChart && !mapChart.isDisposed()) {
               const rawData = mapJson.data || []
+              // 更新海外统计
+              if (mapJson.summary) {
+                document.getElementById('stat-overseas').textContent = mapJson.summary.overseas_count ?? 0
+              }
               const provinceMap = buildProvinceMap(rawData)
               const mapData = Object.entries(provinceMap).map(([name, value]) => ({ name, value }))
               mapChart.setOption({ series: [{ data: mapData }] })
