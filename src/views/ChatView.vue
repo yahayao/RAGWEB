@@ -84,18 +84,6 @@
           <div v-if="message.role === 'user'" class="avatar user-avatar">你</div>
         </div>
 
-        <!-- 非流式等待动画 -->
-        <div v-if="chatStore.isCurrentSessionLoading && !chatStore.isStreaming" class="message-row assistant">
-          <img class="avatar assistant-avatar" src="/asset/avatar/AI.jpg" alt="AI" />
-          <div class="bubble-wrapper">
-            <div class="thinking-indicator">思考中</div>
-            <div class="message-bubble loading-bubble">
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
-            </div>
-          </div>
-        </div>
         <div v-if="showContextLimitTip" class="context-limit-tip">对话轮次已达到上限，请开启新对话</div>
       </div>
 
@@ -141,8 +129,8 @@
     <div v-if="showUserModal" class="modal-overlay">
       <div class="modal-box">
         <div class="modal-title">欢迎使用BNBU招生问答助手</div>
-        <p class="modal-desc">请输入您的称呼，用于保存和恢复对话记录</p>
-        <input class="modal-input" v-model="userIdInput" placeholder="输入您的称呼（如：张三）"
+        <p class="modal-desc">请输入您的昵称，用于保存和恢复对话记录</p>
+        <input class="modal-input" v-model="userIdInput" placeholder="输入您的昵称"
           @keydown.enter="confirmUserId" maxlength="30" />
         <div class="modal-actions">
           <button class="modal-confirm-btn" :disabled="!userIdInput.trim()" @click="confirmUserId">
@@ -183,7 +171,7 @@
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useChatStore } from '../store/chat'
 import { sendMessage, sendMessageStream } from '../api/chat'
-import type { Message, ChatRequest, HistoryItem } from '../types'
+import type { Message, ChatRequest } from '../types'
 import RecordRTC from 'recordrtc'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -333,7 +321,11 @@ const confirmUserId = async () => {
     const { data } = await registerUser(name)
     if (data.code === 200) {
       const userData = data.data
-      chatStore.setUserInfo(String(userData.id), userData.username)
+      if (!userData.auth_token) {
+        alert('会话创建失败，请重试')
+        return
+      }
+      chatStore.setUserInfo(String(userData.id), userData.username, userData.auth_token)
       chatStore.setUserGeo(
         userData.region || '',
         userData.country_code || '',
@@ -528,7 +520,7 @@ const isThinkingInProgress = (content: string) => {
 }
 
 const isCurrentStreamingAssistantMessage = (message: Message) => {
-  if (!chatStore.isCurrentSessionLoading || !chatStore.isStreaming) return false
+  if (!chatStore.isCurrentSessionLoading) return false
   if (message.role !== 'assistant') return false
 
   const lastMessage = chatStore.messages[chatStore.messages.length - 1]
@@ -540,6 +532,10 @@ const isContextLengthExceededError = (errorMsg: string) => {
   return /CONTEXT_OVERFLOW|context_length_exceeded|maximum\s+context\s+length|max\s*context\s*length|context\s*window|too\s+many\s+tokens|token\s+limit|input\s+is\s+too\s+long|prompt\s+is\s+too\s+long|超出.{0,8}上下文|上下文.{0,8}(超|长|限)|输入内容过长|轮次上限/i.test(
     errorMsg,
   )
+}
+
+const isAuthError = (errorMsg: string) => {
+  return /认证信息|401|AUTH_REQUIRED|invalid token/i.test(errorMsg)
 }
 
 const getDisplayContent = (content: string) => content.trim()
@@ -580,16 +576,10 @@ const handleSend = async () => {
   inputText.value = ''
   scrollToBottom()
 
-  // 5. 构建历史记录和请求参数
-  const allMessages = chatStore.messages
-  const history: HistoryItem[] = allMessages
-    .slice(0, -1)
-    .filter((m) => m.id !== 'welcome')
-    .map((m) => ({ role: m.role, content: m.content }))
-
+  // 5. 构建请求参数：历史由后端按 uid + session_id 加载
   const requestData: ChatRequest = {
     question: userMessage.content,
-    history: history.length > 0 ? history : undefined,
+    session_id: sessionIdAtSend,
   }
 
   const checkAndShowAlert = () => {
@@ -605,7 +595,7 @@ const handleSend = async () => {
   };
 
   // 6. 区分流式/普通模式处理
-  if (chatStore.isStreaming) {
+  if (true) {
     // 流式模式：先添加空的 AI 消息，再逐步更新内容
     const assistantMessage: Message = {
       id: `stream-${Date.now()}`,
@@ -655,6 +645,12 @@ const handleSend = async () => {
       },
       (error: Error) => {
         console.error('流式传输错误:', error)
+        if (isAuthError(error.message)) {
+          chatStore.clearAuth()
+          chatStore.setSessionLoading(sessionIdAtSend, false)
+          showUserModal.value = true
+          return
+        }
         const isContextOverflow = isContextLengthExceededError(error.message)
         showContextLimitTip.value = isContextOverflow
         if (!streamedContent) {
@@ -709,7 +705,15 @@ const handleSend = async () => {
 
     } catch (error) {
       console.error('发送消息失败:', error)
-      const errorMsg = error instanceof Error ? error.message : String(error)
+      const errorMsg = error instanceof Error
+        ? (error as Error).message
+        : String(error ?? '')
+      if (isAuthError(errorMsg)) {
+        chatStore.clearAuth()
+        chatStore.setSessionLoading(sessionIdAtSend, false)
+        showUserModal.value = true
+        return
+      }
       const isContextOverflow = isContextLengthExceededError(errorMsg)
       showContextLimitTip.value = isContextOverflow
       const isTimeout = /超时|timeout|ECONNABORTED/i.test(errorMsg)
@@ -766,11 +770,8 @@ const closeModal = () => {
 }
 
 onMounted(async () => {
-  if (!chatStore.currentUserId) {
-    showUserModal.value = true
-  } else if (!chatStore.currentDisplayName) {
-    // 旧版本用户：localStorage 有 chat_user_id 但没有 chat_display_name
-    // 需要重新注册
+  if (!chatStore.authToken || !chatStore.currentUserId || !chatStore.currentDisplayName) {
+    // 缺少 token 或昵称时重新创建匿名会话，uid 和 token 才是身份
     showUserModal.value = true
   } else {
     await initAfterLogin()

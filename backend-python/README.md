@@ -1,15 +1,16 @@
 # RAGWEB Python Backend
 
-独立 Python FastAPI 后端，提供聊天记录 CRUD、IP 地理位置查询、数据大屏、邮件告警等功能。
+独立 Python FastAPI 后端，提供匿名会话、聊天记录 CRUD、RAG 编排、IP 地理位置查询、数据大屏、邮件告警等功能。
 
 ## API 接口
 
-- `POST /api/chat/register` — 注册用户
+- `POST /api/chat/register` — 创建匿名会话（昵称可选），返回 `uid + auth_token`
 - `PUT /api/chat/user-geo` — 手动更新用户地理位置
 - `POST /api/chat/record` — 保存对话记录
 - `GET /api/chat/records/:session_id` — 获取会话历史
 - `DELETE /api/chat/records/:session_id` — 删除会话
 - `GET /api/chat/sessions/:user_id` — 用户会话列表
+- `POST /api/rag/chat` — RAG 对话（Bearer token + `question/session_id/stream`）
 - `GET /api/ip/lookup` — 查询 IP 归属地
 - `POST /api/ip/batch-lookup` — 批量查询 IP 归属地
 - `GET /api/ip/health` — GeoIP 数据库健康检查
@@ -65,6 +66,21 @@ geoipupdate -f /etc/GeoIP.conf -d /path/to/backend-python/geoip
 - `TRUSTED_PROXY_CIDRS` — 可信代理 CIDR（多个用逗号分隔）
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_PASSWORD` — 邮件告警配置
 
+### RAG 编排层配置
+
+- `LLM_BASE_URL` — 内部 LLM 服务地址，默认 `http://127.0.0.1:8000`
+- `INTERNAL_API_KEY` — 调用内部 `/v1/internal/chat` 的 key
+- `LLM_TIMEOUT_SECONDS` — LLM 请求超时，默认 180
+- `RAG_EMBEDDING_API_URL` / `RAG_EMBEDDING_TOP_K` / `RAG_EMBEDDING_TIMEOUT` — 检索服务配置
+- `RAG_QUERY_REWRITER_URL` / `RAG_QUERY_REWRITER_TIMEOUT` / `RAG_ENABLE_QUERY_REWRITE` / `RAG_QUERY_REWRITE_MAX` — query rewrite 配置
+- `RAG_MAX_HISTORY_TURNS` / `RAG_MAX_QUESTION_CHARS` / `RAG_MAX_HISTORY_CHARS` / `RAG_MAX_CONTEXT_ITEMS` / `RAG_MAX_CONTEXT_CHARS` — 基础护栏长度限制
+
+数据库需要执行 `sql/add_auth_token_column.sql` 为 `chat_users` 增加 `auth_token_hash`；应用启动时也会自动尝试补列。
+
+### LLM 服务契约
+
+后端通过内部端点 `POST /v1/internal/chat` 调用 LLM，请求头使用 `X-Internal-Key: <INTERNAL_API_KEY>`。该端点由 LLM 服务实现方维护，不在此仓库实现。
+
 ## 5. 配置可信代 
 
 只有请求直接来自 `TRUSTED_PROXY_CIDRS` 配置的地址时，才信任转发 Header（X-Forwarded-For 等）。
@@ -106,6 +122,7 @@ python scripts/rebuild_user_geo.py --batch-size 500
 ## 9. 运行测试
 
 ```bash
+python -m unittest test_rag.py -v
 python -m pytest test_geo.py -v
 ```
 
@@ -133,4 +150,10 @@ python -m pytest test_geo.py -v
 
 ## 12. 与前端联调
 
-根目录 `vite.config.ts` 已将 `/api/chat` 代理到 Python 后端（默认 `http://localhost:9000`）。
+根目录 `vite.config.ts` 已将 `/api/rag` 和 `/api/chat` 代理到 Python 后端（默认 `http://localhost:9000`）。
+
+## 13. 公网访问边界
+
+- 公网只应暴露 `/api/rag/chat`、`/api/chat/*`、`/api/ip/lookup`
+- `/api/dashboard/*`、`/api/statistic/*`、`/api/ip/batch-lookup`、`/api/ip/health`、`/dashboard` 只允许内网或管理网访问
+- LLM 服务的 `/v1/*` 只能由后端访问，不能暴露到公网

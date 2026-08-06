@@ -418,7 +418,7 @@ async function confirmDomestic() {
   const code = selectedProvince.value
   if (!code) return
 
-  const provinceName = provinceNameMap[code]
+  const provinceName = provinceNameMap[code] ?? code
   const country = provinceCountryMap[code]
 
   let countryCode: string

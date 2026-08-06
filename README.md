@@ -6,13 +6,13 @@ RAGWEB 是一个基于 **RAG（检索增强生成）** 的全栈 AI 对话 Web �
 
 - **AI 对话**：接入外部 RAG API，支持上下文感知的多轮对话
 - **流式输出**：基于 SSE/ReadableStream，AI 回复逐字实时渲染
-- **深度思考模式**：支持 Qwen3 等具备 `<think>` 标签的推理模型，可展示/隐藏思考过程
+- **深度思考模式**：由后端控制，默认开启，思考内容不回传前端
 - **多会话管理**：支持创建新会话、切换会话，自动以首条消息为会话标题
 - **历史记录持久化**：对话记录通过后端接口存入 MySQL，支持按会话查询与删除
 - **Markdown 渲染**：AI 回复内容通过 marked + DOMPurify 安全渲染为富文本
 - **深色 / 浅色主题**：一键切换，状态全局同步
 - **语音输入**：集成 RecordRTC，支持麦克风录音输入
-- **设置页**：可动态配置 API 地址、模型选择、流式输出开关
+- **匿名会话**：无需真实注册，昵称仅展示，uid/token 作为身份
 - **数据库持久化**：基于 PostgreSQL 存储用户、会话、聊天记录
 
 ## 技术栈
@@ -26,18 +26,17 @@ RAGWEB 是一个基于 **RAG（检索增强生成）** 的全栈 AI 对话 Web �
 | HTTP 客户端   | Axios + Fetch API（流式） |
 | Markdown 渲染 | marked + DOMPurify        |
 | 语音录制      | RecordRTC                 |
-| 后端框架      | Python + Flask            |
+| 后端框架      | Python + FastAPI          |
 | 数据库        | MySQL（PyMySQL）          |
 
 ## 项目结构
 
 ```
 RAGWEB/
-├── backend-python/         # 后端（Python + Flask）
-│   ├── app.py              # 服务入口，注册聊天数据接口
+├── backend-python/         # 后端（Python + FastAPI）
+│   ├── main.py             # 服务入口，挂载聊天记录、IP、数据大屏和 RAG 编排路由
 │   ├── requirements.txt
-│   └── ip2region/
-│       └── ip2region_v4.xdb # 需自行准备（默认路径）
+│   └── rag/                # RAG 后端编排层
 ├── src/                    # 前端（Vue 3 + TypeScript）
 │   ├── api/
 │   │   └── chat.ts         # RAG API 调用 & 数据库接口封装
@@ -51,7 +50,6 @@ RAGWEB/
 │   │   └── chat.ts         # TypeScript 类型定义
 │   ├── views/
 │   │   ├── ChatView.vue    # 主聊天页面
-│   │   └── SettingsView.vue# 设置页面
 │   ├── App.vue
 │   └── main.ts
 ├── .env                    # 环境变量（需手动创建，见下方说明）
@@ -66,7 +64,7 @@ RAGWEB/
 - Node.js `^20.19.0` 或 `>=22.12.0`
 - pnpm（前端包管理器）
 - MySQL 数据库
-- 已部署的 RAG API 服务（提供 `POST /v1/rag/chat` 接口）
+- 已部署的 RAG 后端编排服务（提供 `POST /api/rag/chat` 接口）
 
 ### 1. 克隆项目
 
@@ -80,21 +78,18 @@ cd RAGWEB
 在项目根目录创建 `.env` 文件：
 
 ```env
-# RAG API 服务地址（前端直接调用）
-VITE_API_BASE_URL=http://localhost:8000/api
-
 # /api/chat 数据源开关：
 # true  -> 走独立 Python 后端（推荐）
 # false -> 走 Vite 中间件 vite-plugin-chat-api.ts
 VITE_USE_PYTHON_CHAT_BACKEND=true
 
-# 聊天记录后端（Python）地址，供 Vite 代理 /api/chat 使用
+# 后端编排服务地址，供 Vite 代理 /api/rag 和 /api/chat 使用
 VITE_CHAT_BACKEND_URL=http://localhost:9000
 ```
 
 说明：
 
-- 当 `VITE_USE_PYTHON_CHAT_BACKEND=true` 时，`/api/chat/*` 会代理到 `VITE_CHAT_BACKEND_URL`。
+- 当 `VITE_USE_PYTHON_CHAT_BACKEND=true` 时，`/api/rag/*` 和 `/api/chat/*` 会代理到 `VITE_CHAT_BACKEND_URL`。
 - 当 `VITE_USE_PYTHON_CHAT_BACKEND=false` 时，`/api/chat/*` 由本地 `vite-plugin-chat-api.ts` 中间件处理（直接连接 MySQL）。
 
 在 `backend-python/` 目录创建环境变量（可参考 `.env.example`）：
@@ -175,7 +170,7 @@ pnpm dev
 ```sh
 cd backend-python
 pip install -r requirements.txt
-python app.py
+uvicorn main:app --host 0.0.0.0 --port 9000
 ```
 
 后端默认运行在 `http://localhost:9000`。

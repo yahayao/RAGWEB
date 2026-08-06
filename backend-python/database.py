@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import os
+import secrets
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -185,6 +187,11 @@ class ChatUser(Base):
         String(100),
         nullable=True,
     )
+    auth_token_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
     manual_geo: Mapped[bool] = mapped_column(
         default=False,
         server_default=text("false"),
@@ -234,6 +241,15 @@ class ChatSession(Base):
 def ensure_schema() -> None:
     """仅负责建表，不做业务数据变更"""
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE chat_users "
+            "ADD COLUMN IF NOT EXISTS auth_token_hash VARCHAR(64)"
+        ))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_users_auth_token_hash "
+            "ON chat_users(auth_token_hash)"
+        ))
 
 
 def json_resp(status: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -544,13 +560,56 @@ def _prefer_public_ip(candidates: list[str]) -> str | None:
     return parsed[0] if parsed else None
 
 
+def issue_auth_token() -> tuple[str, str]:
+    """生成匿名会话 token，返回 (明文 token, SHA-256 哈希)。"""
+    token = secrets.token_urlsafe(32)
+    return token, hash_auth_token(token)
+
+
+def hash_auth_token(token: str) -> str:
+    """将 token 转为只用于数据库比对的 SHA-256 哈希。"""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def get_user_by_auth_token(db: Session, token: str) -> ChatUser | None:
+    """按 Bearer token 查找用户，token 不存在时返回 None。"""
+    if not token:
+        return None
+    token_hash = hash_auth_token(token)
+    return db.query(ChatUser).filter(ChatUser.auth_token_hash == token_hash).first()
+
+
+def session_has_records(db: Session, session_id: str) -> bool:
+    """检查 session_id 是否已经存在聊天记录。"""
+    return (
+        db.query(ChatSession.id)
+        .filter(ChatSession.session_id == session_id)
+        .first()
+        is not None
+    )
+
+
+def session_has_records_for_user(db: Session, user_id: int, session_id: str) -> bool:
+    """检查 session_id 是否属于指定用户。"""
+    return (
+        db.query(ChatSession.id)
+        .filter(
+            ChatSession.session_id == session_id,
+            ChatSession.user_id == user_id,
+        )
+        .first()
+        is not None
+    )
+
+
 def register_user(db: Session, display_name_raw: str, client_ip: str) -> dict:
-    """注册新用户：自增 id 作为唯一标识，username 存展示名（可重复）
+    """创建匿名会话用户：uid 是身份，display_name 仅作为展示昵称。
 
     每次注册都会查询 IP 归属地并写入 geo 字段。
     如果用户已设置 manual_geo=True，则保留其手动选择的地理位置。
     """
-    username = (display_name_raw or "").strip()[:64] or "匿名用户"
+    token, token_hash = issue_auth_token()
+    username = (display_name_raw or "").strip()[:64] or f"匿名用户-{token[:6]}"
     geo = lookup_geo(client_ip)
     user = ChatUser(
         username=username,
@@ -558,12 +617,14 @@ def register_user(db: Session, display_name_raw: str, client_ip: str) -> dict:
         region=geo.region,
         country_code=geo.country_code,
         country_name=geo.country_name,
+        auth_token_hash=token_hash,
     )
     db.add(user)
     db.flush()
     return {
         "id": int(user.id),
         "username": user.username,
+        "auth_token": token,
         "region": user.region,
         "country_code": user.country_code,
         "country_name": user.country_name,

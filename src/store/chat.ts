@@ -10,13 +10,11 @@ export const useChatStore = defineStore('chat', {
     isLoading: false,
     loadingSessions: {} as Record<string, boolean>,
     isDarkTheme: false,
-    isDeepThinking: false,
-    isShowThinking: false,
-    isStreaming: true,
     sessions: [] as Session[],
     currentSessionId: '',
     currentUserId: localStorage.getItem('chat_user_id') ?? '',
     currentDisplayName: localStorage.getItem('chat_display_name') ?? '',
+    authToken: localStorage.getItem('chat_auth_token') ?? '',
 
     // 用户地理位置信息
     userGeo: {
@@ -44,11 +42,21 @@ export const useChatStore = defineStore('chat', {
       this.currentUserId = userId
       localStorage.setItem('chat_user_id', userId)
     },
-    setUserInfo(uid: string, displayName: string) {
+    setUserInfo(uid: string, displayName: string, authToken: string) {
       this.currentUserId = uid
       this.currentDisplayName = displayName
+      this.authToken = authToken
       localStorage.setItem('chat_user_id', uid)
       localStorage.setItem('chat_display_name', displayName)
+      localStorage.setItem('chat_auth_token', authToken)
+    },
+    clearAuth() {
+      this.currentUserId = ''
+      this.currentDisplayName = ''
+      this.authToken = ''
+      localStorage.removeItem('chat_user_id')
+      localStorage.removeItem('chat_display_name')
+      localStorage.removeItem('chat_auth_token')
     },
     setUserGeo(region: string, country_code: string, country_name: string, manual_geo: boolean) {
       this.userGeo.region = region
@@ -99,15 +107,6 @@ export const useChatStore = defineStore('chat', {
     },
     toggleTheme() {
       this.isDarkTheme = !this.isDarkTheme
-    },
-    toggleDeepThinking() {
-      this.isDeepThinking = !this.isDeepThinking
-    },
-    toggleShowThinking() {
-      this.isShowThinking = !this.isShowThinking
-    },
-    toggleStreaming() {
-      this.isStreaming = !this.isStreaming
     },
     updateMessageContent(id: string, content: string) {
       const msg = this.messages.find((m) => m.id === id)

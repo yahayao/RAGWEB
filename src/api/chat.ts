@@ -1,12 +1,16 @@
 import axios from 'axios'
-import type { ChatRequest, ChatResponse, ChatRecord } from '../types/chat' // 修正导入路径
+import type { AuthSessionData, ChatRequest, ChatResponse, ChatRecord } from '../types/chat'
 
 const CHAT_TIMEOUT_MS = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS ?? 15000)
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: CHAT_TIMEOUT_MS,
 })
+
+const authHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem('chat_auth_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 const CONTEXT_OVERFLOW_CODE = 'CONTEXT_OVERFLOW'
 const CONTEXT_OVERFLOW_FALLBACK_MESSAGE = '输入内容过长，已超过模型上下文长度上限，请精简后重试。'
@@ -74,7 +78,9 @@ const extractApiErrorMessage = (error: unknown): string => {
 
 export const sendMessage = async (data: ChatRequest): Promise<ChatResponse> => {
   try {
-    const response = await api.post<ChatResponse>('/v1/rag/chat', data)
+    const response = await api.post<ChatResponse>('/api/rag/chat', data, {
+      headers: authHeaders(),
+    })
     return response.data
   } catch (error) {
     throw new Error(extractApiErrorMessage(error))
@@ -106,9 +112,12 @@ export const sendMessageStream = async (
 
   try {
     refreshTimeout()
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/rag/chat`, {
+    const response = await fetch('/api/rag/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+      },
       body: JSON.stringify({ ...data, stream: true }),
       signal: controller.signal,
     })
@@ -183,8 +192,8 @@ export const sendMessageStream = async (
   }
 }
 
-// ========== 数据库相关接口（新增，无原有逻辑改动） ==========
-// 创建数据库接口专用的axios实例（避免影响原有/v1接口）
+// ========== 数据库相关接口 ==========
+// 创建数据库接口专用的 axios 实例
 const chatDbApi = axios.create({
   baseURL: '/api/chat', // 配合vite proxy转发到localhost:3000/chat
   timeout: 10000,
@@ -199,11 +208,14 @@ export const saveChatRecord = async (data: ChatRecord) => {
 }
 
 /**
- * 注册新用户：传入称呼，后端返回系统生成的 uid
- * @param displayName 用户输入的称呼
+ * 创建匿名会话：昵称仅展示，后端返回 uid 和 auth_token
+ * @param displayName 用户输入的昵称（可空）
  */
-export const registerUser = async (displayName: string) => {
-  return chatDbApi.post('/register', { display_name: displayName })
+export const registerUser = async (displayName?: string) => {
+  return chatDbApi.post<{ code: number; message: string; data: AuthSessionData }>(
+    '/register',
+    { display_name: displayName || '' },
+  )
 }
 
 /**

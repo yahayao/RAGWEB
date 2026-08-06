@@ -2,6 +2,7 @@
 
 挂载模块:
 - /api/chat/*    聊天记录 CRUD（内联实现）
+- /api/rag/*     RAG 后端编排层（匿名会话 token、历史加载、检索、prompt 组装、LLM 调用）
 - /api/statistic 数据统计 API（statistic.py 子路由）
 - /api/ip        IP 查询 API（ip2location.py 子路由）
 - /dashboard     数据大屏页面
@@ -28,6 +29,7 @@ import database
 from statistic import router as statistic_router
 from ip2location import router as ip_router
 from dashboard import router as dashboard_router
+from rag.router import router as rag_router
 
 logger = logging.getLogger(__name__)
 
@@ -122,17 +124,15 @@ async def _safe_json_body(request: Request) -> dict[str, Any]:
 
 @app.post("/api/chat/register")
 async def register_user(request: Request) -> JSONResponse:
-    """注册新用户：返回自增 id 作为用户标识，username 存展示名（可重复）"""
+    """创建匿名会话用户：昵称可选且仅展示，uid/token 才是身份。"""
     body = await _safe_json_body(request)
     display_name = str(body.get("display_name") or "").strip()
-    if not display_name:
-        return JSONResponse(status_code=400, content={"code": 400, "message": "请输入称呼"})
     db = database.SessionLocal()
     try:
         client_ip = database.extract_client_ip(request)
         result = database.register_user(db, display_name, client_ip)
         db.commit()
-        return JSONResponse(status_code=200, content={"code": 200, "message": "注册成功", "data": result})
+        return JSONResponse(status_code=200, content={"code": 200, "message": "会话创建成功", "data": result})
     except Exception as exc:
         db.rollback()
         logger.exception("用户注册失败")
@@ -340,3 +340,4 @@ async def save_record(request: Request) -> JSONResponse:
 app.include_router(statistic_router)     # /api/statistic/*
 app.include_router(ip_router)            # /api/ip/*
 app.include_router(dashboard_router)     # /dashboard, /api/dashboard/*, /api/alert/*, /ws/dashboard
+app.include_router(rag_router)           # /api/rag/*

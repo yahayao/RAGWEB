@@ -7,40 +7,30 @@ export interface Message {
   timestamp: number
 }
 
-/** 对话历史记录（传给后端的格式，不含前端内部字段）*/
-export interface HistoryItem {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-/** 手动传入的检索上下文 */
-export interface RetrievedContext {
-  content: string
-  similarity?: number
-  source?: string
-}
-
-/** POST /v1/rag/chat 请求体（和后端接口严格对齐）*/
+/** POST /api/rag/chat 请求体 */
 export interface ChatRequest {
   question: string
-  history?: HistoryItem[]
-  contexts?: RetrievedContext[]
-  similar_num?: number
-  temperature?: number
-  max_tokens?: number
-  top_p?: number
+  session_id: string
   stream?: boolean
-  system_prompt_prefix?: string
 }
 
-/** POST /v1/rag/chat 响应体（和后端返回严格对齐）*/
+/** 匿名会话引导返回 */
+export interface AuthSessionData {
+  id: number | string
+  username: string
+  auth_token: string
+  region?: string
+  country_code?: string | null
+  country_name?: string
+  manual_geo?: boolean
+}
+
+/** POST /api/rag/chat 响应体 */
 export interface ChatResponse {
   id: string
   object: string
   created: number
   question: string
-  context_count: number
-  contexts: RetrievedContext[]
   choices: {
     index: number
     message: {
